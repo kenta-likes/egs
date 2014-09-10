@@ -18,7 +18,7 @@ thread(int* arg) {
 
 int
 main(void) {
-  int* x1 = (int*)malloc(sizeof(int));
+  /* int* x1 = (int*)malloc(sizeof(int));
   int* x2 = (int*)malloc(sizeof(int));
   int* x3 = (int*)malloc(sizeof(int)); 
   int* x4 = (int*)malloc(sizeof(int));
@@ -37,7 +37,7 @@ main(void) {
   queue_append(q, x1);
   queue_append(q, x2);
   queue_append(q, x3);
-  queue_append(q. x4);
+  queue_append(q. x4); */
   
   minithread_system_initialize(thread, NULL);
   return 0;
