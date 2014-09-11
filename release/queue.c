@@ -7,7 +7,7 @@
 #include <stdio.h>
 
 typedef struct node_t{
-  void* val;
+  void* item;
   struct node_t* next;
 } node_t;
 
@@ -38,7 +38,7 @@ queue_new() {
  */
 int
 queue_prepend(queue_t queue, void* item) {
-  node_t* new_node;
+  node_t* new_node = NULL;
   if (queue == NULL){
     return -1;
   }
@@ -47,7 +47,7 @@ queue_prepend(queue_t queue, void* item) {
     return -1;
   }
   new_node->next = queue->head;
-  new_node->val = item;
+  new_node->item = item;
   if (queue->head == NULL) {
     queue->tail = new_node;
   }
@@ -62,7 +62,7 @@ queue_prepend(queue_t queue, void* item) {
  */
 int
 queue_append(queue_t queue, void* item) {
-  node_t* new_node;
+  node_t* new_node = NULL;
   if (queue == NULL){
     return -1;
   }
@@ -71,7 +71,7 @@ queue_append(queue_t queue, void* item) {
     return -1;
   }
   new_node->next = NULL;
-  new_node->val = item;
+  new_node->item = item;
   if (queue->head == NULL){
     queue->head = new_node;
     queue->tail = new_node;
@@ -89,19 +89,19 @@ queue_append(queue_t queue, void* item) {
  */
 int
 queue_dequeue(queue_t queue, void** item) {
-  node_t* temp;
+  node_t* tmp = NULL;
   if (queue == NULL || queue->len == 0){
     return -1;
   }
-  *item = queue->head->val;
+  *item = queue->head->item;
   if (queue->len == 1){
     free(queue->head);
     queue->head = NULL;
     queue->tail = NULL;
   } else {
-    temp = queue->head;
+    tmp = queue->head;
     queue->head = queue->head->next;
-    free(temp);
+    free(tmp);
   }
   queue->len--;
   return 0;
@@ -109,13 +109,25 @@ queue_dequeue(queue_t queue, void** item) {
 
 /*
  * Iterate the function parameter over each element in the queue.  The
- * additional void* argument is passed to the function as its first
- * argument and the queue element is the second.  Return 0 (success)
+ * queue element is passed to the function as its first argument
+ * and the additional void* argument is the second. Return 0 (success)
  * or -1 (failure).
  */
 int
 queue_iterate(queue_t queue, func_t f, void* item) {
-    return 0;
+  node_t* runner = NULL;
+  int i = 0;
+  if (queue == NULL || f == NULL){
+    return -1;
+  }
+  runner = queue->head;
+  while (runner != NULL && i < queue->len){
+    f(runner->item, item);
+  }
+  if (runner != NULL || i < queue->len){
+    return -1;
+  }
+  return 0;
 }
 
 /*
@@ -123,8 +135,22 @@ queue_iterate(queue_t queue, func_t f, void* item) {
  */
 int
 queue_free (queue_t queue) {
-  if (queue == NULL || queue->len != 0){
+  node_t* tmp = NULL;
+  node_t* tmp_ = NULL;
+  int curr_len = 0;
+  if (queue == NULL){
     return -1;
+  }
+  tmp = queue->head;
+  curr_len = queue->len;
+  while (curr_len > 0){
+    if (tmp == NULL){//should not be NULL while len > 0
+      return -1;
+    }
+    tmp_ = tmp->next;
+    free(tmp);
+    tmp = tmp_;
+    curr_len--;
   }
   free(queue);
   return 0;
@@ -145,5 +171,28 @@ queue_length(queue_t queue) {
  */
 int
 queue_delete(queue_t queue, void* item) {
-    return 0;
+  node_t* runner = NULL;
+  node_t* follower = NULL;
+  int i = 0;
+  if (queue == NULL){
+    return -1;
+  }
+  runner = queue->head;
+  follower = queue->head;
+  while (runner != NULL && i < queue->len){
+    if (runner->item == item){
+      follower->next = runner->next;
+      free(runner);
+      return 0;
+    }
+    follower = runner;
+    runner = runner->next;
+    i--;
+  }
+  //reach NULL before len or go over len
+  if (runner != NULL || i < queue->len){
+    return -1;
+  }
+  //fine and dandy, we just didn't find the element
+  return 0;
 }
