@@ -140,13 +140,13 @@ queue_free (queue_t queue) {
   node_t* tmp = NULL;
   node_t* tmp_ = NULL;
   int curr_len = 0;
-  if (queue == NULL){
+  if (queue == NULL) {
     return -1;
   }
   tmp = queue->head;
   curr_len = queue->len;
-  while (curr_len > 0){
-    if (tmp == NULL){//should not be NULL while len > 0
+  while (curr_len > 0) {
+    if (tmp == NULL) {//should not be NULL while len > 0
       return -1;
     }
     tmp_ = tmp->next;
@@ -176,11 +176,14 @@ queue_delete(queue_t queue, void* item) {
   node_t* runner = NULL;
   node_t* follower = NULL;
   int i = 0;
+
   if (queue == NULL){
     return -1;
   }
+
   runner = queue->head;
   follower = queue->head;
+
   while (runner != NULL && i < queue->len){
     if (runner->item == item){
       follower->next = runner->next;
@@ -190,11 +193,12 @@ queue_delete(queue_t queue, void* item) {
       if (runner == queue->tail){
         if (queue->len > 1){
           queue->tail = follower;
-        } else {//tail == head, so tail = NULL
+        } else { //tail == head, so tail = NULL
           queue->tail = NULL;
         }
       }
       free(runner);
+      queue->len--;
       return 0;
     }
     follower = runner;
