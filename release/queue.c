@@ -123,7 +123,9 @@ queue_iterate(queue_t queue, func_t f, void* item) {
   runner = queue->head;
   while (runner != NULL && i < queue->len){
     f(runner->item, item);
+    i++;
   }
+  //reach NULL before len or go over len
   if (runner != NULL || i < queue->len){
     return -1;
   }
@@ -182,12 +184,22 @@ queue_delete(queue_t queue, void* item) {
   while (runner != NULL && i < queue->len){
     if (runner->item == item){
       follower->next = runner->next;
+      if (runner == queue->head){
+        queue->head = runner->next;
+      }
+      if (runner == queue->tail){
+        if (queue->len > 1){
+          queue->tail = follower;
+        } else {//tail == head, so tail = NULL
+          queue->tail = NULL;
+        }
+      }
       free(runner);
       return 0;
     }
     follower = runner;
     runner = runner->next;
-    i--;
+    i++;
   }
   //reach NULL before len or go over len
   if (runner != NULL || i < queue->len){
