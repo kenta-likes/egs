@@ -16,9 +16,8 @@
 
 typedef struct minithread {
   int id;
-  int* stack_bottom;
-  int* stack_top;
-  int* pc;
+  stack_pointer_t stackbase;
+  stack_pointer_t stacktop;
   int status;
 } minithread;
 
@@ -40,12 +39,23 @@ queue_t runnable = NULL;
 
 minithread_t
 minithread_fork(proc_t proc, arg_t arg) {
-    return (minithread_t)0;
+  minithread_t new_thread = minithread_create(proc,arg);
+  //start running it w/ switch??
+  return new_thread;
 }
 
 minithread_t
 minithread_create(proc_t proc, arg_t arg) {
-  return (minithread_t)0; 
+  minithread_t new_thread = (minithread_t)malloc(sizeof(minithread));
+  if (new_thread == NULL){
+    return NULL;
+  }
+  new_thread->id = current_id++;
+  new_thread->stackbase = NULL;
+  new_thread->stacktop = NULL;
+  new_thread->status = READY;
+  minithread_allocate_stack(&(new_thread->stackbase), &(new_thread->stacktop) );
+  return new_thread; 
 }
 
 minithread_t
@@ -87,14 +97,15 @@ minithread_yield() {
 void
 minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   current_id = 0; // the next thread id to be assigned
-  current_thread = NULL;
   runnable = queue_new();
+  current_thread = minithread_fork( mainproc, mainarg );//malloc can fail
+  //scheduling below...
 }
 /**
 int
 minithread_exit(minithread_t completed) {
   minithread_t next = NULL;
-  free(completed->stack_bottom);
+  free(completed->stackbase);
   free(completed);
   while (1) {
     next = queue_dequeue(runnable);
