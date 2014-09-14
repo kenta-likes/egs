@@ -124,6 +124,7 @@ queue_iterate(queue_t queue, func_t f, void* item) {
   while (runner != NULL && i < queue->len){
     f(runner->item, item);
     i++;
+    runner = runner->next;
   }
   //reach NULL before len or go over len
   if (runner != NULL || i < queue->len){

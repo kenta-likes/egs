@@ -86,8 +86,9 @@ minithread_yield() {
  */
 void
 minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
-  current_thread = (minithread_t)0;
-
+  current_id = 0; // the next thread id to be assigned
+  current_thread = NULL;
+  runnable = queue_new();
 }
 /**
 int
