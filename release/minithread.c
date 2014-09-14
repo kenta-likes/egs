@@ -25,6 +25,7 @@ int current_id = 0; // the next thread id to be assigned
 
 minithread_t current_thread = NULL;
 queue_t runnable = NULL;
+minithread_t idle_thread = NULL;
  
 /*
  * A minithread should be defined either in this file or in a private
@@ -36,6 +37,10 @@ queue_t runnable = NULL;
 
 
 /* minithread functions */
+int 
+idle(arg_t arg) {
+  while (1);
+}
 
 int
 minithread_exit(minithread_t completed) {
@@ -111,9 +116,16 @@ minithread_yield() {
  */
 void
 minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
+  /*printf("entering init");
   current_id = 0; // the next thread id to be assigned
   runnable = queue_new();
-  current_thread = minithread_fork( mainproc, mainarg );//malloc can fail
+  printf("create new queue");
+  idle_thread = minithread_create(idle, NULL);
+  printf("created idle thread");
+  current_thread = minithread_create(mainproc, mainarg);
+  printf("created current thread");
+  minithread_switch(idle_thread->stacktop, current_thread->stacktop);*/
+  //current_thread = minithread_fork( mainproc, mainarg );//malloc can fail
   //scheduling below...
 }
 
