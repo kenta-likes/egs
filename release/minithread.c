@@ -37,10 +37,23 @@ queue_t runnable = NULL;
 
 /* minithread functions */
 
+int
+minithread_exit(minithread_t completed) {
+  return 0;
+  /*minithread_t next = NULL;
+  free(completed->stackbase);
+  free(completed);
+  while (1) {
+    next = queue_dequeue(runnable);
+    if (next != NULL) {
+      //there is another process to run
+  */    
+}
+ 
 minithread_t
 minithread_fork(proc_t proc, arg_t arg) {
   minithread_t new_thread = minithread_create(proc,arg);
-  //start running it w/ switch??
+  minithread_switch(new_thread->stacktop, new_thread->stacktop);
   return new_thread;
 }
 
@@ -53,8 +66,10 @@ minithread_create(proc_t proc, arg_t arg) {
   new_thread->id = current_id++;
   new_thread->stackbase = NULL;
   new_thread->stacktop = NULL;
-  new_thread->status = READY;
+  new_thread->status = RUNNABLE;
   minithread_allocate_stack(&(new_thread->stackbase), &(new_thread->stacktop) );
+  minithread_initialize_stack(&(new_thread->stacktop), proc, arg,
+                              (proc_t)minithread_exit, NULL);
   return new_thread; 
 }
 
@@ -101,16 +116,4 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   current_thread = minithread_fork( mainproc, mainarg );//malloc can fail
   //scheduling below...
 }
-/**
-int
-minithread_exit(minithread_t completed) {
-  minithread_t next = NULL;
-  free(completed->stackbase);
-  free(completed);
-  while (1) {
-    next = queue_dequeue(runnable);
-    if (next != NULL) {
-      //there is another process to run
-      
-} **/
 

@@ -12,7 +12,7 @@
 #define __MINITHREAD_H__
 
 #include "machineprimitives.h"
-#define READY 0
+#define RUNNABLE 0
 #define BLOCKED 1
 #define RUNNING 2
 
