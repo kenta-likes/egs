@@ -12,9 +12,21 @@
 #include "minithread.h"
 #include "queue.h"
 #include "synch.h"
-
 #include <assert.h>
 
+typedef struct minithread {
+  int id;
+  int* stack_bottom;
+  int* stack_top;
+  int* pc;
+  int status;
+} minithread;
+
+int current_id = 0; // the next thread id to be assigned
+
+minithread_t current_thread = NULL;
+queue_t runnable = NULL;
+ 
 /*
  * A minithread should be defined either in this file or in a private
  * header file.  Minithreads have a stack pointer with to make procedure
@@ -33,17 +45,17 @@ minithread_fork(proc_t proc, arg_t arg) {
 
 minithread_t
 minithread_create(proc_t proc, arg_t arg) {
-    return (minithread_t)0;
+  return (minithread_t)0; 
 }
 
 minithread_t
 minithread_self() {
-    return (minithread_t)0;
+  return current_thread;
 }
 
 int
 minithread_id() {
-    return 0;
+  return current_thread->id;
 }
 
 void
@@ -74,6 +86,19 @@ minithread_yield() {
  */
 void
 minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
-}
+  current_thread = (minithread_t)0;
 
+}
+/**
+int
+minithread_exit(minithread_t completed) {
+  minithread_t next = NULL;
+  free(completed->stack_bottom);
+  free(completed);
+  while (1) {
+    next = queue_dequeue(runnable);
+    if (next != NULL) {
+      //there is another process to run
+      
+} **/
 
