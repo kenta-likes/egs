@@ -13,6 +13,7 @@
 #include "queue.h"
 #include "synch.h"
 #include <assert.h>
+#include "unistd.h"
 
 typedef struct minithread {
   int id;
@@ -25,7 +26,6 @@ int current_id = 0; // the next thread id to be assigned
 
 minithread_t current_thread = NULL;
 queue_t runnable = NULL;
-minithread_t idle_thread = NULL;
  
 /*
  * A minithread should be defined either in this file or in a private
@@ -44,6 +44,7 @@ idle(arg_t arg) {
 
 int
 minithread_exit(minithread_t completed) {
+  while (1);
   return 0;
   /*minithread_t next = NULL;
   free(completed->stackbase);
@@ -58,7 +59,7 @@ minithread_exit(minithread_t completed) {
 minithread_t
 minithread_fork(proc_t proc, arg_t arg) {
   minithread_t new_thread = minithread_create(proc,arg);
-  minithread_switch(new_thread->stacktop, new_thread->stacktop);
+  minithread_switch(&(current_thread->stacktop), &(new_thread->stacktop));
   return new_thread;
 }
 
@@ -69,8 +70,8 @@ minithread_create(proc_t proc, arg_t arg) {
     return NULL;
   }
   new_thread->id = current_id++;
-  new_thread->stackbase = NULL;
-  new_thread->stacktop = NULL;
+  new_thread->stackbase = (stack_pointer_t)malloc(sizeof(int));
+  new_thread->stacktop =  (stack_pointer_t)malloc(sizeof(int));
   new_thread->status = RUNNABLE;
   minithread_allocate_stack(&(new_thread->stackbase), &(new_thread->stacktop) );
   minithread_initialize_stack(&(new_thread->stacktop), proc, arg,
@@ -116,16 +117,11 @@ minithread_yield() {
  */
 void
 minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
-  /*printf("entering init");
   current_id = 0; // the next thread id to be assigned
   runnable = queue_new();
-  printf("create new queue");
-  idle_thread = minithread_create(idle, NULL);
-  printf("created idle thread");
-  current_thread = minithread_create(mainproc, mainarg);
-  printf("created current thread");
-  minithread_switch(idle_thread->stacktop, current_thread->stacktop);*/
-  //current_thread = minithread_fork( mainproc, mainarg );//malloc can fail
+
+  current_thread = minithread_create(idle, NULL);
+  current_thread = minithread_fork(mainproc, mainarg);//malloc can fail
   //scheduling below...
 }
 
