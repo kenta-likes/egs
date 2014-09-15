@@ -27,6 +27,7 @@ int thread1(int* arg) {
   minithread_fork(thread2, NULL);
   printf("Thread 1.\n");
   minithread_yield();
+  printf("HNNNNGGHHHH");
   minithread_yield();
 
   return 0;
