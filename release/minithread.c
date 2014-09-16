@@ -47,16 +47,11 @@ idle(arg_t arg) {
 
 int
 minithread_exit(minithread_t completed) {
-  while(1);
+  current_thread->status = DEAD;
+  while (1){
+    minithread_yield();
+  }
   return 0;
-  /*minithread_t next = NULL;
-  free(completed->stackbase);
-  free(completed);
-  while (1) {
-    next = queue_dequeue(runnable);
-    if (next != NULL) {
-      //there is another process to run
-  */    
 }
  
 minithread_t
@@ -135,7 +130,11 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   tmp = minithread_create(idle, NULL);
   current_thread = minithread_create(mainproc, mainarg);
   minithread_switch(&(tmp->stacktop), &(current_thread->stacktop));
-  //current_thread = minithread_fork(mainproc, mainarg); //malloc can fail
-  //scheduling below...
+  while ( queue_length(runnable) > 0){
+    //do nothing for FIFO scheduling, since
+    //we assume processes voluntarily give up
+    //CPU by calling yield. Once we are non-preemptive
+    //we will begin adding stuff here.
+  }
 }
 

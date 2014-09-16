@@ -15,6 +15,7 @@
 #define RUNNABLE 0
 #define BLOCKED 1
 #define RUNNING 2
+#define DEAD -1
 
 /*
  * struct minithread:
