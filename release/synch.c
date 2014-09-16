@@ -11,15 +11,12 @@
  *      You must implement the procedures and types defined in this interface.
  */
 
-
 /*
  * Semaphores.
  */
 struct semaphore {
-    /* This is temporary so that the compiler does not error on an empty struct.
-     * You should replace this with your own struct members.
-     */
-    int tmp;
+  tas_lock_t* l;
+  int cnt;    
 };
 
 
@@ -28,7 +25,16 @@ struct semaphore {
  *      Allocate a new semaphore.
  */
 semaphore_t semaphore_create() {
-    return (semaphore_t)0;
+  semaphore_t new_sem;
+  new_sem = (semaphore_t)malloc(sizeof(struct semaphore));
+  
+  // check if malloc was successful
+  if (new_sem == NULL) return NULL;
+  
+  // initialize semaphore fields
+  new_sem->l = (tas_lock_t*)malloc(sizeof(int));
+  new_sem->cnt = 0;
+  return new_sem; 
 }
 
 /*
@@ -36,6 +42,11 @@ semaphore_t semaphore_create() {
  *      Deallocate a semaphore.
  */
 void semaphore_destroy(semaphore_t sem) {
+  // check if sem is a valid arg
+  if (sem == NULL) return;
+
+  free(sem->l);
+  free(sem); 
 }
 
 
@@ -45,6 +56,12 @@ void semaphore_destroy(semaphore_t sem) {
  *      sem with an initial value cnt.
  */
 void semaphore_initialize(semaphore_t sem, int cnt) {
+  // check if sem is a valid arg
+  if (sem == NULL) return;
+
+  // set the lock to available
+  atomic_clear(sem->l);
+  sem->cnt = cnt;  
 }
 
 
@@ -53,6 +70,13 @@ void semaphore_initialize(semaphore_t sem, int cnt) {
  *      P on the sempahore.
  */
 void semaphore_P(semaphore_t sem) {
+  // keep checking whether lock is avaiable
+  // if available, grab it and move on
+  while (atomic_test_and_set(sem->l) != 0);
+  sem->cnt--;
+
+  // release lock
+  atomic_clear(sem->l);
 }
 
 /*
@@ -60,4 +84,11 @@ void semaphore_P(semaphore_t sem) {
  *      V on the sempahore.
  */
 void semaphore_V(semaphore_t sem) {
+  // keep checking whether lock is avaiable
+  // if available, grab it and move on
+  while (atomic_test_and_set(sem->l) != 0);
+  sem->cnt++;
+
+  // release lock
+  atomic_clear(sem->l);
 }
