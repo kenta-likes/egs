@@ -16,6 +16,7 @@ int x = 0;
 
 int thread2(int* arg) {
 
+  printf("Begin Thread 2\n");
   while (x < 20) {
     printf("Thread 2, x = %d.\n", x++);
     semaphore_V(sem1);
@@ -33,6 +34,7 @@ int thread1(int* arg) {
     semaphore_P(sem1);
     semaphore_V(sem2);
   }
+  printf("End of Thread 1\n");
 
   return 0;
 }

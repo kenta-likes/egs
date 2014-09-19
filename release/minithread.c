@@ -25,7 +25,8 @@ typedef struct minithread {
 int current_id = 0; // the next thread id to be assigned
 
 minithread_t current_thread = NULL;
-queue_t runnable = NULL;
+queue_t runnable_q = NULL;
+queue_t blocked_q = NULL;
  
 /*
  * A minithread should be defined either in this file or in a private
@@ -38,26 +39,21 @@ queue_t runnable = NULL;
 
 /* minithread functions */
 int 
-idle(arg_t arg) {
-  while (1){
-    minithread_yield();
-  }
+dummy(arg_t arg) {
   return 0;
 }
 
 int
 minithread_exit(minithread_t completed) {
   current_thread->status = DEAD;
-  while (1){
-    minithread_yield();
-  }
-  return 0;
+  //call scheduler here
+  return dummy(NULL);
 }
  
 minithread_t
 minithread_fork(proc_t proc, arg_t arg) {
   minithread_t new_thread = minithread_create(proc,arg);
-  queue_append(runnable, new_thread);//add to queue
+  queue_append(runnable_q, new_thread);//add to queue
   return new_thread;
 }
 
@@ -115,8 +111,8 @@ minithread_yield() {
   void* tmp = NULL;
   minithread_t prev = current_thread;
 
-  queue_append(runnable, current_thread);
-  queue_dequeue(runnable, &tmp);
+  queue_append(runnable_q, current_thread);
+  queue_dequeue(runnable_q, &tmp);
   prev = current_thread;
   current_thread = (minithread_t)tmp;
   minithread_switch(&(prev->stacktop), &( ((minithread_t)tmp)->stacktop));
@@ -141,11 +137,13 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   minithread_t tmp = NULL;
   current_id = 0; // the next thread id to be assigned
   
-  runnable = queue_new();
-  tmp = minithread_create(idle, NULL);
+  runnable_q = queue_new();
+  blocked_q = queue_new();
+  tmp = minithread_create(dummy, NULL);
+  tmp->status = DEAD;
   current_thread = minithread_create(mainproc, mainarg);
   minithread_switch(&(tmp->stacktop), &(current_thread->stacktop));
-  while ( queue_length(runnable) > 0){
+  while ( queue_length(runnable_q) > 0){
     //do nothing for FIFO scheduling, since
     //we assume processes voluntarily give up
     //CPU by calling yield. Once we are non-preemptive
