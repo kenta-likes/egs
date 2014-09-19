@@ -73,6 +73,13 @@ extern void minithread_stop();
 extern void minithread_start(minithread_t t);
 
 /*
+ * minithread_unblock()
+ * takes the first element on the blocked queue
+ * calls minithread_start on that element
+ */
+extern void minithread_unblock();
+
+/*
  * minithread_yield()
  *  Forces the caller to relinquish the processor and be put to the end of
  *  the ready queue.  Allows another thread to run.

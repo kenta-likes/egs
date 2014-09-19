@@ -100,6 +100,17 @@ minithread_start(minithread_t t) {
 }
 
 void
+minithread_unblock() {
+  void** blocked_thread;
+  queue_dequeue(blocked_q, blocked_thread);
+  if ((*((minithread_t*)blocked_thread))->STATUS != BLOCKED) {
+    printf("thread %d was removed from blocked queue, 
+	should have status BLOCKED\n", thread_id());
+  }
+  minithread_start((*((minithread_t*)blocked_thread)));
+}
+
+void
 minithread_yield() {
   void* tmp = NULL;
   minithread_t prev = current_thread;
