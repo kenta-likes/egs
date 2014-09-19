@@ -92,7 +92,6 @@ void semaphore_P(semaphore_t sem) {
  *      V on the sempahore.
  */
 void semaphore_V(semaphore_t sem) {
-  void** blocked;
   // keep checking whether lock is avaiable
   // if available, grab it and move on
   acquire_lock(sem->l);
@@ -101,8 +100,7 @@ void semaphore_V(semaphore_t sem) {
     release_lock(sem->l);
   }
   else {
-    queue_dequeue(blocked_q, blocked);
-    minithread_start((minithread_t)(*blocked));
+    minithread_unblock();
     release_lock(sem->l);
   } 
 }
