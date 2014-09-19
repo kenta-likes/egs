@@ -89,10 +89,14 @@ minithread_id() {
 
 void
 minithread_stop() {
+  current_thread->status = BLOCKED;
+  queue_append(blocked_q, current_thread);
 }
 
 void
 minithread_start(minithread_t t) {
+  t->status = RUNNABLE;
+  queue_append(runnable_q, t);
 }
 
 void

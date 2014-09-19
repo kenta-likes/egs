@@ -16,8 +16,7 @@
  */
 struct semaphore {
   tas_lock_t* l;
-  int cnt;
-  queue_t waitq;    
+  int cnt;    
 };
 
 
@@ -30,17 +29,14 @@ void release_lock(tas_lock_t* l) { atomic_clear(l); }
  */
 semaphore_t semaphore_create() {
   semaphore_t new_sem;
-  queue_t new_q;
   new_sem = (semaphore_t)malloc(sizeof(struct semaphore));
-  new_q = queue_new();
 
   // check if malloc was successful
-  if (new_sem == NULL || new_q == NULL) return NULL;
+  if (new_sem == NULL) return NULL;
   
   // initialize semaphore fields
   new_sem->l = (tas_lock_t*)malloc(sizeof(int));
   new_sem->cnt = 0;
-  new_sem->waitq = new_q;
   return new_sem; 
 }
 
@@ -52,7 +48,6 @@ void semaphore_destroy(semaphore_t sem) {
   // check if sem is a valid arg
   if (sem == NULL) return;
   
-  queue_free(sem->waitq);
   free(sem->l);
   free(sem); 
 }
@@ -68,7 +63,7 @@ void semaphore_initialize(semaphore_t sem, int cnt) {
   if (sem == NULL) return;
  
   // set the lock to available
-  atomic_clear(sem->l);
+  clear_lock(sem->l);
   sem->cnt = cnt;  
 }
 
