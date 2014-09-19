@@ -63,7 +63,7 @@ void semaphore_initialize(semaphore_t sem, int cnt) {
   if (sem == NULL) return;
  
   // set the lock to available
-  clear_lock(sem->l);
+  release_lock(sem->l);
   sem->cnt = cnt;  
 }
 
@@ -101,7 +101,7 @@ void semaphore_V(semaphore_t sem) {
     release_lock(sem->l);
   }
   else {
-    queue_dequeue(sem->waitq, blocked);
+    queue_dequeue(blocked_q, blocked);
     minithread_start((minithread_t)(*blocked));
     release_lock(sem->l);
   } 
