@@ -20,6 +20,9 @@ struct semaphore {
 };
 
 
+void acquire_lock(tas_lock_t* l) { while(atomic_test_and_set(l) != 0); }
+void release_lock(tas_lock_t* l) { atomic_clear(l); }
+
 /*
  * semaphore_t semaphore_create()
  *      Allocate a new semaphore.
@@ -27,7 +30,7 @@ struct semaphore {
 semaphore_t semaphore_create() {
   semaphore_t new_sem;
   new_sem = (semaphore_t)malloc(sizeof(struct semaphore));
-  
+
   // check if malloc was successful
   if (new_sem == NULL) return NULL;
   
@@ -44,7 +47,7 @@ semaphore_t semaphore_create() {
 void semaphore_destroy(semaphore_t sem) {
   // check if sem is a valid arg
   if (sem == NULL) return;
-
+  
   free(sem->l);
   free(sem); 
 }
@@ -58,9 +61,9 @@ void semaphore_destroy(semaphore_t sem) {
 void semaphore_initialize(semaphore_t sem, int cnt) {
   // check if sem is a valid arg
   if (sem == NULL) return;
-
+ 
   // set the lock to available
-  atomic_clear(sem->l);
+  clear_lock(sem->l);
   sem->cnt = cnt;  
 }
 
@@ -72,11 +75,16 @@ void semaphore_initialize(semaphore_t sem, int cnt) {
 void semaphore_P(semaphore_t sem) {
   // keep checking whether lock is avaiable
   // if available, grab it and move on
-  while (atomic_test_and_set(sem->l) != 0);
-  sem->cnt--;
-
-  // release lock
-  atomic_clear(sem->l);
+  acquire_lock(sem->l);
+  
+  if (--sem->cnt < 0) {
+    minithread_stop();
+    release_lock(sem->l);
+    minithread_yield();
+  }
+  else {
+    release_lock(sem->l);
+  }
 }
 
 /*
@@ -84,11 +92,18 @@ void semaphore_P(semaphore_t sem) {
  *      V on the sempahore.
  */
 void semaphore_V(semaphore_t sem) {
+  void** blocked;
   // keep checking whether lock is avaiable
   // if available, grab it and move on
-  while (atomic_test_and_set(sem->l) != 0);
-  sem->cnt++;
-
-  // release lock
-  atomic_clear(sem->l);
+  acquire_lock(sem->l);
+  
+  if (++sem->l >= 0) {
+    release_lock(sem->l);
+  }
+  else {
+    queue_dequeue(sem->waitq, blocked);
+    minithread_start((minithread_t)(*blocked));
+    release_lock(sem->l);
+  } 
 }
+
