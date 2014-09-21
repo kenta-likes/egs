@@ -72,6 +72,9 @@ void semaphore_initialize(semaphore_t sem, int cnt) {
   sem->count = cnt;  
 }
 
+void semaphore_block(semaphore_t sem) {
+  minithread_enqueue_and_schedule(sem->wait_q); 
+}
 
 /*
  * semaphore_P(semaphore_t sem)
@@ -80,16 +83,19 @@ void semaphore_initialize(semaphore_t sem, int cnt) {
 void semaphore_P(semaphore_t sem) {
   // keep checking whether lock is avaiable
   // if available, grab it and move on
-  printf("p called\n");
   acquire_lock(sem->lock);
-  printf("p acquired lock\n");
   if (--sem->count < 0){    
     release_lock(sem->lock);
-    minithread_block(sem);
+    semaphore_block(sem);
   }
   else {
     release_lock(sem->lock);
   }
+}
+
+
+void semaphore_unblock(semaphore_t sem) {
+  minithread_dequeue_and_run(sem->wait_q);
 }
 
 /*
@@ -97,18 +103,12 @@ void semaphore_P(semaphore_t sem) {
  *      V on the sempahore.
  */
 void semaphore_V(semaphore_t sem) {
-  // keep checking whether lock is avaiable
-  // if available, grab it and move on
-  printf("v called\n");
   acquire_lock(sem->lock);
-  printf("v acquired lock\n");
   if (++sem->count >= 0) {
     release_lock(sem->lock);
   }
   else {
-    minithread_unblock(sem);
+    semaphore_unblock(sem);
     release_lock(sem->lock);
-  } 
+  }
 }
-
-queue_t semphore_queue(semaphore_t sem) { return sem->wait_q; }

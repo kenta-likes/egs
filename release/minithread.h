@@ -42,6 +42,12 @@ extern minithread_t minithread_fork(proc_t proc, arg_t arg);
 extern void minithread_enqueue_and_schedule(queue_t q);
 
 /*
+ *  minithread_dequeue_and_schedule(queue_t q)
+ *  dequeues the first element of q, puts on runnable queue
+ */
+extern void minithread_dequeue_and_run(queue_t q);
+
+/*
  * minithread_t
  * minithread_create(proc_t proc, arg_t arg)
  *  Like minithread_fork, only returned thread is not scheduled
