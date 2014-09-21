@@ -47,6 +47,7 @@ int
 minithread_exit(minithread_t completed) {
   current_thread->status = DEAD;
   //call scheduler here
+  while(1);
   return dummy(NULL);
 }
  
@@ -85,8 +86,18 @@ minithread_id() {
 
 void
 minithread_stop() {
+  void* tmp;
+  minithread_t prev;
+
+  printf("stops\n");
   current_thread->status = BLOCKED;
   queue_append(blocked_q, current_thread);
+
+
+  queue_dequeue(runnable_q, &tmp);
+  prev = current_thread;
+  current_thread = (minithread_t)tmp;
+  minithread_switch(&(prev->stacktop), &( ((minithread_t)tmp)->stacktop));
 }
 
 void
@@ -98,6 +109,7 @@ minithread_start(minithread_t t) {
 void
 minithread_unblock() {
   void* blocked_thread;
+  printf("unblocks at least once\n");
   queue_dequeue(blocked_q, &blocked_thread);
   if ((*((minithread_t*)blocked_thread))->status != BLOCKED) {
     printf("thread %d should have status BLOCKED\n", minithread_id());
