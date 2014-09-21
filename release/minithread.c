@@ -22,12 +22,33 @@ typedef struct minithread {
   int status;
 } minithread;
 
+
 int current_id = 0; // the next thread id to be assigned
 
 minithread_t current_thread = NULL;
+minithread_t scheduler_thread = NULL;
 queue_t runnable_q = NULL;
 queue_t blocked_q = NULL;
+queue_t dead_q = NULL;
  
+int scheduler(){
+  minithread_t next;
+  minithread_t tmp;
+  while (1){
+    //check for dead threads, free them
+    //dequeue from runnable threads
+    if ( queue_length(runnable_q) > 0 ){
+      if (queue_dequeue(runnable_q, (void**)(&next) ) == -1){
+        //error
+      }
+      tmp = current_thread;
+      current_thread = next;
+      minithread_switch(&(tmp->stacktop), &( next->stacktop));
+    }
+    //if runnable threads is empty, idle loop
+    //
+  }
+}
 /*
  * A minithread should be defined either in this file or in a private
  * header file.  Minithreads have a stack pointer with to make procedure
@@ -39,9 +60,13 @@ queue_t blocked_q = NULL;
 
 int
 minithread_exit(minithread_t completed) {
+  minithread_t tmp;
   current_thread->status = DEAD;
   //call scheduler here
-  while(1);
+  queue_append(dead_q, current_thread);
+  tmp = current_thread;
+  current_thread = scheduler_thread;
+  minithread_switch(&(tmp->stacktop), &( current_thread->stacktop));
   return 0;
 }
  
@@ -149,7 +174,9 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   
   runnable_q = queue_new();
   blocked_q = queue_new();
+  dead_q = queue_new();
   current_thread = minithread_create(mainproc, mainarg);
+  scheduler_thread = minithread_create(scheduler, NULL);
   minithread_switch(&dummy_ptr, &(current_thread->stacktop));
   //minithread_switch(&(tmp->stacktop), &(current_thread->stacktop));
   while ( queue_length(runnable_q) > 0){
