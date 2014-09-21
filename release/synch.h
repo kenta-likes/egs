@@ -27,6 +27,12 @@ extern semaphore_t semaphore_create();
 extern void semaphore_destroy(semaphore_t sem);
 
 /*
+ *  semaphore_queue(semaphore_t sem);
+ *  returns the wait queue.
+ */
+extern queue_t semaphore_queue(semaphore_t sem);
+
+/*
  * semaphore_initialize(semaphore_t sem, int cnt)
  *  initialize the semaphore data structure pointed at by
  *  sem with an initial value cnt.

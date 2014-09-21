@@ -15,8 +15,9 @@
  * Semaphores.
  */
 struct semaphore {
-  tas_lock_t* l;
-  int cnt;    
+  tas_lock_t* lock;
+  int count;
+  queue_t wait_q;    
 };
 
 
@@ -29,14 +30,17 @@ void release_lock(tas_lock_t* l) { atomic_clear(l); }
  */
 semaphore_t semaphore_create() {
   semaphore_t new_sem;
+  queue_t new_q;
   new_sem = (semaphore_t)malloc(sizeof(struct semaphore));
+  new_q = queue_new();
 
   // check if malloc was successful
-  if (new_sem == NULL) return NULL;
+  if (new_sem == NULL || new_q == NULL) return NULL;
   
   // initialize semaphore fields
-  new_sem->l = (tas_lock_t*)malloc(sizeof(int));
-  new_sem->cnt = 0;
+  new_sem->lock = (tas_lock_t*)malloc(sizeof(int));
+  new_sem->count = 0;
+  new_sem->wait_q = new_q;
   return new_sem; 
 }
 
@@ -48,7 +52,8 @@ void semaphore_destroy(semaphore_t sem) {
   // check if sem is a valid arg
   if (sem == NULL) return;
   
-  free(sem->l);
+  free(sem->lock);
+  queue_free(sem->wait_q);
   free(sem); 
 }
 
@@ -63,8 +68,8 @@ void semaphore_initialize(semaphore_t sem, int cnt) {
   if (sem == NULL) return;
  
   // set the lock to available
-  release_lock(sem->l);
-  sem->cnt = cnt;  
+  release_lock(sem->lock);
+  sem->count = cnt;  
 }
 
 
@@ -76,14 +81,14 @@ void semaphore_P(semaphore_t sem) {
   // keep checking whether lock is avaiable
   // if available, grab it and move on
   printf("p called\n");
-  acquire_lock(sem->l);
+  acquire_lock(sem->lock);
   printf("p acquired lock\n");
-  if (--sem->cnt < 0) {
-    minithread_stop();
-    release_lock(sem->l);
+  if (--sem->count < 0){    
+    release_lock(sem->lock);
+    minithread_block(sem);
   }
   else {
-    release_lock(sem->l);
+    release_lock(sem->lock);
   }
 }
 
@@ -95,14 +100,15 @@ void semaphore_V(semaphore_t sem) {
   // keep checking whether lock is avaiable
   // if available, grab it and move on
   printf("v called\n");
-  acquire_lock(sem->l);
+  acquire_lock(sem->lock);
   printf("v acquired lock\n");
-  if (++sem->l >= 0) {
-    release_lock(sem->l);
+  if (++sem->count >= 0) {
+    release_lock(sem->lock);
   }
   else {
-    minithread_unblock();
-    release_lock(sem->l);
+    minithread_unblock(sem);
+    release_lock(sem->lock);
   } 
 }
 
+queue_t semphore_queue(semaphore_t sem) { return sem->wait_q; }

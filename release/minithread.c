@@ -10,7 +10,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "minithread.h"
-#include "queue.h"
 #include "synch.h"
 #include <assert.h>
 #include "unistd.h"
@@ -89,15 +88,12 @@ minithread_stop() {
   void* tmp;
   minithread_t prev;
 
-  printf("stops\n");
   current_thread->status = BLOCKED;
   queue_append(blocked_q, current_thread);
-
 
   queue_dequeue(runnable_q, &tmp);
   prev = current_thread;
   current_thread = (minithread_t)tmp;
-  minithread_switch(&(prev->stacktop), &( ((minithread_t)tmp)->stacktop));
 }
 
 void
@@ -107,14 +103,40 @@ minithread_start(minithread_t t) {
 }
 
 void
-minithread_unblock() {
+minithread_enqueue_and_schedule(queue_t q) {
+  minithread_t tmp;
+
+  current_thread->status = BLOCKED;
+  queue_append(q, current_thread);
+  
+  current_thread = scheduler_thread;
+
+  // invoke scheduler
+  minithread_switch(&(tmp->stacktop), &(current_thread->stacktop));
+}
+void
+minithread_block(semaphore_t sem) {
+  void* tmp;
+  minithread_t prev;
+
+  current_thread->status = BLOCKED;
+  queue_append(semaphore_queue(sem), current_thread);
+
+  queue_dequeue(runnable_q, &tmp);
+  prev = current_thread;
+  current_thread = (minithread_t)tmp;
+  minithread_switch(&(prev->stacktop), &(current_thread->stacktop));
+}
+
+
+void
+minithread_unblock(semaphore_t sem) {
   void* blocked_thread;
-  printf("unblocks at least once\n");
-  queue_dequeue(blocked_q, &blocked_thread);
-  if ((*((minithread_t*)blocked_thread))->status != BLOCKED) {
+  queue_dequeue(semaphore_queue(sem), &blocked_thread);
+  if (((minithread_t)blocked_thread)->status != BLOCKED) {
     printf("thread %d should have status BLOCKED\n", minithread_id());
   }
-  minithread_start((*((minithread_t*)blocked_thread)));
+  minithread_start((minithread_t)blocked_thread);
 }
 
 void

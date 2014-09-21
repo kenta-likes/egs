@@ -12,6 +12,7 @@
 #define __MINITHREAD_H__
 
 #include "machineprimitives.h"
+#include "queue.h"
 #define RUNNABLE 0
 #define BLOCKED 1
 #define RUNNING 2
@@ -34,6 +35,11 @@ typedef struct minithread *minithread_t;
  */ 
 extern minithread_t minithread_fork(proc_t proc, arg_t arg);
 
+/*
+ * minithread_enqueue_and_schedule(queue_t q)
+ * puts current_thread on q and runs the next available thread
+ */
+extern void minithread_enqueue_and_schedule(queue_t q);
 
 /*
  * minithread_t
@@ -71,13 +77,6 @@ extern void minithread_stop();
  *  Make t runnable.
  */
 extern void minithread_start(minithread_t t);
-
-/*
- * minithread_unblock()
- * takes the first element on the blocked queue
- * calls minithread_start on that element
- */
-extern void minithread_unblock();
 
 /*
  * minithread_yield()
