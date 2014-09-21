@@ -31,10 +31,18 @@ queue_t blocked_q = NULL;
 queue_t dead_q = NULL;
  
 int scheduler(){
+  minithread_t dead;
   minithread_t next;
   minithread_t tmp;
   while (1){
     //check for dead threads, free them
+    while ( queue_length(dead_q) > 0 ){
+      if (queue_dequeue(dead_q, (void**)(&dead) ) == -1){
+        //error
+      }
+      minithread_free_stack(dead->stackbase);
+      free(dead);
+    }
     //dequeue from runnable threads
     if ( queue_length(runnable_q) > 0 ){
       if (queue_dequeue(runnable_q, (void**)(&next) ) == -1){
@@ -44,9 +52,17 @@ int scheduler(){
       current_thread = next;
       minithread_switch(&(tmp->stacktop), &( next->stacktop));
     }
-    //if runnable threads is empty, idle loop
-    //
+    //if runnable threads is empty, do nothing(idle loop)
   }
+}
+
+void
+invoke_scheduler(){
+  minithread_t tmp;
+
+  tmp = current_thread;
+  current_thread = scheduler_thread;
+  minithread_switch(&(tmp->stacktop), &( current_thread->stacktop));
 }
 /*
  * A minithread should be defined either in this file or in a private
@@ -59,13 +75,10 @@ int scheduler(){
 
 int
 minithread_exit(minithread_t completed) {
-  minithread_t tmp;
   current_thread->status = DEAD;
-  //call scheduler here
   queue_append(dead_q, current_thread);
-  tmp = current_thread;
-  current_thread = scheduler_thread;
-  minithread_switch(&(tmp->stacktop), &( current_thread->stacktop));
+
+  invoke_scheduler();
   return 0;
 }
  
@@ -113,23 +126,15 @@ minithread_start(minithread_t t) {
 
 void
 minithread_enqueue_and_schedule(queue_t q) {
-  minithread_t tmp;
-
   current_thread->status = BLOCKED;
   queue_append(q, current_thread);
-  
-  tmp = current_thread;  
-  current_thread = scheduler_thread;
-
-  // invoke scheduler
-  minithread_switch(&(tmp->stacktop), &(current_thread->stacktop));
+  invoke_scheduler();
 }
 
 void
 minithread_dequeue_and_run(queue_t q) {
   void* blocked_thread;
   queue_dequeue(q, &blocked_thread);
-
   if (((minithread_t)blocked_thread)->status != BLOCKED) {
     printf("thread %d should have status BLOCKED\n", minithread_id());
   }
@@ -138,14 +143,13 @@ minithread_dequeue_and_run(queue_t q) {
 
 void
 minithread_yield() {
-  void* tmp = NULL;
-  minithread_t prev = current_thread;
-
+  minithread_t tmp;
+  //put current thread at end of runnable
   queue_append(runnable_q, current_thread);
-  queue_dequeue(runnable_q, &tmp);
-  prev = current_thread;
-  current_thread = (minithread_t)tmp;
-  minithread_switch(&(prev->stacktop), &( ((minithread_t)tmp)->stacktop));
+  //call scheduler here
+  tmp = current_thread;
+  current_thread = scheduler_thread;
+  minithread_switch(&(tmp->stacktop), &( current_thread->stacktop));
 }
 
 /*
