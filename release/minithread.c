@@ -37,18 +37,12 @@ queue_t blocked_q = NULL;
  */
 
 
-/* minithread functions */
-int 
-dummy(arg_t arg) {
-  return 0;
-}
-
 int
 minithread_exit(minithread_t completed) {
   current_thread->status = DEAD;
   //call scheduler here
   while(1);
-  return dummy(NULL);
+  return 0;
 }
  
 minithread_t
@@ -89,12 +83,12 @@ minithread_stop() {
   void* tmp;
   minithread_t prev;
 
-  printf("stops\n");
   current_thread->status = BLOCKED;
   queue_append(blocked_q, current_thread);
 
-
-  queue_dequeue(runnable_q, &tmp);
+  if (queue_dequeue(runnable_q, &tmp) == -1){
+    //error
+  }
   prev = current_thread;
   current_thread = (minithread_t)tmp;
   minithread_switch(&(prev->stacktop), &( ((minithread_t)tmp)->stacktop));
@@ -109,12 +103,13 @@ minithread_start(minithread_t t) {
 void
 minithread_unblock() {
   void* blocked_thread;
-  printf("unblocks at least once\n");
-  queue_dequeue(blocked_q, &blocked_thread);
-  if ((*((minithread_t*)blocked_thread))->status != BLOCKED) {
+  if (queue_dequeue(blocked_q, &blocked_thread) == -1){
+    //error
+  }
+  if (((minithread_t)blocked_thread)->status != BLOCKED) {
     printf("thread %d should have status BLOCKED\n", minithread_id());
   }
-  minithread_start((*((minithread_t*)blocked_thread)));
+  minithread_start((minithread_t)blocked_thread);
 }
 
 void
@@ -145,15 +140,18 @@ minithread_yield() {
  */
 void
 minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
-  minithread_t tmp = NULL;
+  int a;
+  void* dummy_ptr;
+  minithread_t tmp;
+  tmp = NULL;
+  dummy_ptr = (void*)&a;
   current_id = 0; // the next thread id to be assigned
   
   runnable_q = queue_new();
   blocked_q = queue_new();
-  tmp = minithread_create(dummy, NULL);
-  tmp->status = DEAD;
   current_thread = minithread_create(mainproc, mainarg);
-  minithread_switch(&(tmp->stacktop), &(current_thread->stacktop));
+  minithread_switch(&dummy_ptr, &(current_thread->stacktop));
+  //minithread_switch(&(tmp->stacktop), &(current_thread->stacktop));
   while ( queue_length(runnable_q) > 0){
     //do nothing for FIFO scheduling, since
     //we assume processes voluntarily give up

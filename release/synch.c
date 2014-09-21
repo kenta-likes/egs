@@ -75,12 +75,10 @@ void semaphore_initialize(semaphore_t sem, int cnt) {
 void semaphore_P(semaphore_t sem) {
   // keep checking whether lock is avaiable
   // if available, grab it and move on
-  printf("p called\n");
   acquire_lock(sem->l);
-  printf("p acquired lock\n");
   if (--sem->cnt < 0) {
-    minithread_stop();
     release_lock(sem->l);
+    minithread_stop();
   }
   else {
     release_lock(sem->l);
@@ -94,10 +92,8 @@ void semaphore_P(semaphore_t sem) {
 void semaphore_V(semaphore_t sem) {
   // keep checking whether lock is avaiable
   // if available, grab it and move on
-  printf("v called\n");
   acquire_lock(sem->l);
-  printf("v acquired lock\n");
-  if (++sem->l >= 0) {
+  if (++sem->cnt > 0) {
     release_lock(sem->l);
   }
   else {
