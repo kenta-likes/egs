@@ -28,7 +28,22 @@ minithread_t scheduler_thread = NULL;
 queue_t runnable_q = NULL;
 queue_t blocked_q = NULL;
 queue_t dead_q = NULL;
- 
+semaphore_t dead_sem = NULL;
+
+int clean_up(){
+  minithread_t dead = NULL;
+
+  while (1){
+    semaphore_P(dead_sem);
+    if (queue_dequeue(dead_q, (void**)(&dead) ) == -1){
+      //error
+    }
+    minithread_free_stack(dead->stackbase);
+    free(dead);   
+  }
+  return -1;
+} 
+
 int scheduler(){
   minithread_t dead = NULL;
   minithread_t next = NULL;
@@ -64,6 +79,7 @@ invoke_scheduler(){
   current_thread = scheduler_thread;
   minithread_switch(&(tmp->stacktop), &( current_thread->stacktop));
 }
+
 /*
  * A minithread should be defined either in this file or in a private
  * header file.  Minithreads have a stack pointer with to make procedure
@@ -77,7 +93,7 @@ int
 minithread_exit(minithread_t completed) {
   current_thread->status = DEAD;
   queue_append(dead_q, current_thread);
-
+  semaphore_V(dead_sem);
   invoke_scheduler();
   return 0;
 }
@@ -168,6 +184,7 @@ minithread_yield() {
  */
 void
 minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
+  minithread_t clean_up_thread = NULL;
   int a = 0;
   void* dummy_ptr = NULL;
   minithread_t tmp = NULL;
@@ -178,6 +195,12 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   runnable_q = queue_new();
   blocked_q = queue_new();
   dead_q = queue_new();
+  
+  dead_sem = semaphore_create();
+  semaphore_initialize(dead_sem, 0);  
+  clean_up_thread = minithread_create(clean_up, NULL);
+  queue_append(runnable_q, clean_up_thread);
+  
   current_thread = minithread_create(mainproc, mainarg);
   scheduler_thread = minithread_create(scheduler, NULL);
   minithread_switch(&dummy_ptr, &(current_thread->stacktop));
