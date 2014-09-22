@@ -24,24 +24,14 @@ typedef struct minithread {
 
 int current_id = 0; // the next thread id to be assigned
 minithread_t current_thread = NULL;
-minithread_t scheduler_thread = NULL;
 queue_t runnable_q = NULL;
 queue_t blocked_q = NULL;
 queue_t dead_q = NULL;
  
 int scheduler(){
-  minithread_t dead = NULL;
   minithread_t next = NULL;
   minithread_t tmp = NULL;
   while (1){
-    //check for dead threads, free them
-    while ( queue_length(dead_q) > 0 ){
-      if (queue_dequeue(dead_q, (void**)(&dead) ) == -1){
-        //error
-      }
-      minithread_free_stack(dead->stackbase);
-      free(dead);
-    }
     //dequeue from runnable threads
     if ( queue_length(runnable_q) > 0 ){
       if (queue_dequeue(runnable_q, (void**)(&next) ) == -1){
@@ -50,20 +40,13 @@ int scheduler(){
       tmp = current_thread;
       current_thread = next;
       minithread_switch(&(tmp->stacktop), &( next->stacktop));
+      return 0;
     }
     //if dead/runnable queue is empty, do nothing (idle thread)
   }
   return 0;
 }
 
-void
-invoke_scheduler(){
-  minithread_t tmp = NULL;
-
-  tmp = current_thread;
-  current_thread = scheduler_thread;
-  minithread_switch(&(tmp->stacktop), &( current_thread->stacktop));
-}
 /*
  * A minithread should be defined either in this file or in a private
  * header file.  Minithreads have a stack pointer with to make procedure
@@ -77,8 +60,7 @@ int
 minithread_exit(minithread_t completed) {
   current_thread->status = DEAD;
   queue_append(dead_q, current_thread);
-
-  invoke_scheduler();
+  scheduler();
   return 0;
 }
  
@@ -128,7 +110,7 @@ void
 minithread_enqueue_and_schedule(queue_t q) {
   current_thread->status = BLOCKED;
   queue_append(q, current_thread);
-  invoke_scheduler();
+  scheduler();
 }
 
 void
@@ -143,13 +125,10 @@ minithread_dequeue_and_run(queue_t q) {
 
 void
 minithread_yield() {
-  minithread_t tmp = NULL;
   //put current thread at end of runnable
   queue_append(runnable_q, current_thread);
   //call scheduler here
-  tmp = current_thread;
-  current_thread = scheduler_thread;
-  minithread_switch(&(tmp->stacktop), &( current_thread->stacktop));
+  scheduler();
 }
 
 /*
@@ -179,7 +158,6 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   blocked_q = queue_new();
   dead_q = queue_new();
   current_thread = minithread_create(mainproc, mainarg);
-  scheduler_thread = minithread_create(scheduler, NULL);
   minithread_switch(&dummy_ptr, &(current_thread->stacktop));
   return;
 }
