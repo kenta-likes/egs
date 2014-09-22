@@ -29,14 +29,12 @@ int buyer_thread(int* arg) {
 int employee_thread(int* arg) {
   long c_num;
   while (phones_produced < M) {
-    printf("In progress. Queue length is %d\n", queue_length(cereal_nums));
     semaphore_V(cereal_sem);
     phones_produced++;
     c_num = curr_cereal_num++;
     queue_append(cereal_nums, (void*)c_num);
     minithread_yield();
   }
-  printf("Finished. Queue length is %d\n", queue_length(cereal_nums));
   return 0;
 }
 
