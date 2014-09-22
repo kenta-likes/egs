@@ -13,28 +13,26 @@ queue_t cereal_nums; //contains all cereal nums
 
 static int N = 30;//employees
 static int M = 5000;//buyers
-int curr_cereal_num;
+long curr_cereal_num;
 int customers_served; //remaining customers
 int phones_produced; //remaining customers
 
 int buyer_thread(int* arg) {
-  int* c_num;
+  long c_num;
   semaphore_P(cereal_sem);
   queue_dequeue(cereal_nums, (void**)(&c_num));
   customers_served++;
-  printf("GOT AN EGS PHONE! Cereal # is: %d\n", *c_num);
-  free(c_num);
+  printf("GOT AN EGS PHONE! Cereal # is: %ld\n", c_num);
   return 0;
 }
 
 int employee_thread(int* arg) {
-  int* c_num;
+  long c_num;
   while (phones_produced < M) {
     printf("In progress. Queue length is %d\n", queue_length(cereal_nums));
     semaphore_V(cereal_sem);
     phones_produced++;
-    c_num = (int*)malloc(sizeof(int));
-    *c_num = curr_cereal_num++;
+    c_num = curr_cereal_num++;
     queue_append(cereal_nums, (void*)c_num);
     minithread_yield();
   }
