@@ -35,10 +35,10 @@ int clean_up(){
   while (1){
     semaphore_P(dead_sem);
     if ( queue_dequeue(dead_q, (void**)(&dead)) == -1 ){
-      //error
+      return -1;
     }
     minithread_free_stack(dead->stackbase);
-    free(dead);   
+    free(dead);
   }
   return -1;
 } 
@@ -50,7 +50,7 @@ int scheduler(){
     //dequeue from runnable threads
     if ( queue_length(runnable_q) > 0 ){
       if (queue_dequeue(runnable_q, (void**)(&next) ) == -1){
-        //error
+        return -1;
       }
       tmp = current_thread;
       current_thread = next;
