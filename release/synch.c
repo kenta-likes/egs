@@ -29,8 +29,8 @@ void release_lock(tas_lock_t* l) { atomic_clear(l); }
  *      Allocate a new semaphore.
  */
 semaphore_t semaphore_create() {
-  semaphore_t new_sem;
-  queue_t new_q;
+  semaphore_t new_sem = NULL;
+  queue_t new_q = NULL;
   new_sem = (semaphore_t)malloc(sizeof(struct semaphore));
   new_q = queue_new();
 
