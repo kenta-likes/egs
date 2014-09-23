@@ -1,5 +1,5 @@
 shop
-test0
+queue_test
 test1
 test2
 test3
@@ -19,7 +19,8 @@ random.o
 sieve.o
 start.o
 synch.o
-test0.o
+queue_test.o
 test1.o
 test2.o
 test3.o
+shop.o
