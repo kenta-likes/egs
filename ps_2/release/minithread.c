@@ -22,7 +22,6 @@ typedef struct minithread {
   int status;
 } minithread;
 
-
 int current_id = 0; // the next thread id to be assigned
 minithread_t current_thread = NULL;
 queue_t runnable_q = NULL;
@@ -157,8 +156,10 @@ minithread_yield() {
 void 
 clock_handler(void* arg)
 {
-
+  printf("thread interrupt, thread %i is yielding...\n", current_thread->id);
+  minithread_yield();
 }
+
 
 /*
  * sleep with timeout in milliseconds
@@ -199,7 +200,8 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   semaphore_initialize(dead_sem, 0);  
   clean_up_thread = minithread_create(clean_up, NULL);
   queue_append(runnable_q, clean_up_thread);
-  
+
+  minithread_clock_init(SECOND, (interrupt_handler_t)clock_handler);
   current_thread = minithread_create(mainproc, mainarg);
   minithread_switch(&dummy_ptr, &(current_thread->stacktop));
   return;
