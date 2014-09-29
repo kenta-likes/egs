@@ -6,6 +6,7 @@
 #include "synch.h"
 #include "queue.h"
 #include "minithread.h"
+#include "interrupts.h"
 
 /*
  *      You must implement the procedures and types defined in this interface.
@@ -15,14 +16,9 @@
  * Semaphores.
  */
 struct semaphore {
-  tas_lock_t* lock;
   int count;
   queue_t wait_q;    
 };
-
-
-void acquire_lock(tas_lock_t* l) { while(atomic_test_and_set(l) != 0); }
-void release_lock(tas_lock_t* l) { atomic_clear(l); }
 
 /*
  * semaphore_t semaphore_create()
@@ -31,6 +27,7 @@ void release_lock(tas_lock_t* l) { atomic_clear(l); }
 semaphore_t semaphore_create() {
   semaphore_t new_sem = NULL;
   queue_t new_q = NULL;
+
   new_sem = (semaphore_t)malloc(sizeof(struct semaphore));
   new_q = queue_new();
 
@@ -38,7 +35,6 @@ semaphore_t semaphore_create() {
   if (new_sem == NULL || new_q == NULL) return NULL;
   
   // initialize semaphore fields
-  new_sem->lock = (tas_lock_t*)malloc(sizeof(int));
   new_sem->count = 0;
   new_sem->wait_q = new_q;
   return new_sem; 
@@ -52,7 +48,6 @@ void semaphore_destroy(semaphore_t sem) {
   // check if sem is a valid arg
   if (sem == NULL) return;
   
-  free(sem->lock);
   queue_free(sem->wait_q);
   free(sem); 
 }
@@ -65,11 +60,12 @@ void semaphore_destroy(semaphore_t sem) {
  */
 void semaphore_initialize(semaphore_t sem, int cnt) {
   // check if sem is a valid arg
+  interrupt_level_t l;
   if (sem == NULL) return;
- 
-  // set the lock to available
-  release_lock(sem->lock);
-  sem->count = cnt;  
+  
+  l = set_interrupt_level(DISABLED);
+  sem->count = cnt;
+  set_interrupt_level(l);
 }
 
 void semaphore_block(semaphore_t sem) {
@@ -81,14 +77,11 @@ void semaphore_block(semaphore_t sem) {
  *      P on the sempahore.
  */
 void semaphore_P(semaphore_t sem) {
-  acquire_lock(sem->lock);
-  if (--sem->count < 0){    
-    release_lock(sem->lock);
-    semaphore_block(sem);
-  }
-  else {
-    release_lock(sem->lock);
-  }
+  interrupt_level_t l;
+
+  l = set_interrupt_level(DISABLED);
+  if (--sem->count < 0) semaphore_block(sem);
+  set_interrupt_level(l);
 }
 
 
@@ -101,12 +94,9 @@ void semaphore_unblock(semaphore_t sem) {
  *      V on the sempahore.
  */
 void semaphore_V(semaphore_t sem) {
-  acquire_lock(sem->lock);
-  if (++sem->count > 0) {
-    release_lock(sem->lock);
-  }
-  else {
-    semaphore_unblock(sem);
-    release_lock(sem->lock);
-  }
+  interrupt_level_t l;
+
+  l = set_interrupt_level(DISABLED);
+  if (++sem->count <= 0) semaphore_unblock(sem);
+  set_interrupt_level(l);
 }
