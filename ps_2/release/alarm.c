@@ -81,7 +81,10 @@ void execute_alarm(int sys_time){
     //iterate to find all alarms that need to be executed
     while (curr_hd != NULL && curr_hd->alarm->alarm_time < sys_time){
         ( (curr_hd->alarm)->alarm_func )( (curr_hd->alarm)->alarm_func_arg);
+        free(curr_hd->alarm->alarm_func);
+        free(curr_hd->alarm->alarm_func_arg);
         free(curr_hd->alarm);
+        free(curr_hd);
     }
     a_list->head = curr_hd;
     return;
