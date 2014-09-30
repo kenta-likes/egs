@@ -68,23 +68,62 @@ register_alarm(int delay, alarm_handler_t alarm, void *arg)
 }
 
 /* see alarm.h */
+//assumptions: deregister always called on alarms that
+//were actually registered before
 int
 deregister_alarm(alarm_id alarm)
 {
-    free((alarm_t)alarm);
-    return 0;
-}
-
-void execute_alarm(int sys_time){
     alarm_node_t curr_hd;
+    alarm_node_t tmp;
+    //if list empty, alarm was executed
+    if (a_list->len == 0){
+        return 1;
+    }
     curr_hd = a_list->head;
-    //iterate to find all alarms that need to be executed
-    while (curr_hd != NULL && curr_hd->alarm->alarm_time < sys_time){
-        ( (curr_hd->alarm)->alarm_func )( (curr_hd->alarm)->alarm_func_arg);
+    //if head is alarm, free it and return 0
+    if ( (alarm_id)(curr_hd->alarm) == alarm ){
+        tmp = curr_hd->next;
         free(curr_hd->alarm->alarm_func);
         free(curr_hd->alarm->alarm_func_arg);
         free(curr_hd->alarm);
         free(curr_hd);
+        a_list->head = tmp;
+        a_list->len--;
+        return 0;
+    }
+    while (curr_hd->next != NULL && (alarm_id)(curr_hd->alarm) != alarm){
+        curr_hd = curr_hd->next;
+    }
+    //could not find, alarm was executed previously
+    if (curr_hd->next == NULL){
+        return 1;
+    } else {
+        tmp = curr_hd->next->next;
+        free(curr_hd->next->alarm->alarm_func);
+        free(curr_hd->next->alarm->alarm_func_arg);
+        free(curr_hd->next->alarm);
+        free(curr_hd->next);
+        curr_hd->next = tmp;
+        a_list->len--;
+        return 0;
+    }
+}
+
+void execute_alarm(int sys_time){
+    alarm_node_t curr_hd;
+    alarm_node_t tmp;
+    curr_hd = a_list->head;
+    //iterate to find all alarms that need to be executed
+    //free each node and alarm and func/func arg after execution
+    while (curr_hd != NULL && curr_hd->alarm->alarm_time < sys_time){
+        ( (curr_hd->alarm)->alarm_func )( (curr_hd->alarm)->alarm_func_arg);
+        tmp = curr_hd;
+        curr_hd = curr_hd->next;
+        free(tmp->alarm->alarm_func);
+        free(tmp->alarm->alarm_func_arg);
+        free(tmp->alarm);
+        free(tmp);
+        a_list->len--;
     }
     a_list->head = curr_hd;
     return;
