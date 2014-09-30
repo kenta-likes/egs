@@ -1,3 +1,4 @@
+multilevel_queue_test
 shop
 queue_test
 test1
@@ -14,14 +15,15 @@ machineprimitives.o
 machineprimitives_x86_64.o
 machineprimitives_x86_64_asm.o
 minithread.o
+multilevel_queue.o
 queue.o
 random.o
 sieve.o
 start.o
 synch.o
+multilevel_queue_test.o
 queue_test.o
 test1.o
 test2.o
 test3.o
 shop.o
-alarm.o
