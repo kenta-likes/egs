@@ -34,6 +34,8 @@ multilevel_queue_t multilevel_queue_new(int number_of_levels)
 
   new_multi_q->num_levels = number_of_levels;
   new_multi_q->count = 0;
+  new_multi_q->head = NULL;
+
   for (i = 0; i < number_of_levels; i++) {
     new_node = (node_t)malloc(sizeof(node));
     new_q = queue_new();
