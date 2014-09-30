@@ -14,6 +14,10 @@
 typedef void (*alarm_handler_t)(void*);
 typedef void *alarm_id;
 
+typedef struct alarm *alarm_t;
+typedef struct alarm_node *alarm_node_t;
+typedef struct alarm_list *alarm_list_t;
+
 /* register an alarm to go off in "delay" milliseconds.  Returns a handle to
  * the alarm.
  */
@@ -23,5 +27,9 @@ alarm_id register_alarm(int delay, alarm_handler_t func, void *arg);
  * otherwise.
  */
 int deregister_alarm(alarm_id id);
+
+void execute_alarm();
+
+void init_alarm();
 
 #endif
