@@ -9,6 +9,19 @@
 #include <stdlib.h>
 #include <assert.h>
 
+/** testing func pointers
+typedef void (*some_type)(void*);
+
+typedef struct some_struct{
+  some_type hello;
+} some_struct;
+
+void
+herro_world(void* arg){
+  printf("Herro wurld\n");
+}
+*/
+
 int
 thread(int* arg) {
   printf("Hello, world!\n");
