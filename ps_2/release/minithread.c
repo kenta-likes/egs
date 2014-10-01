@@ -29,6 +29,7 @@ queue_t runnable_q = NULL;
 queue_t blocked_q = NULL;
 queue_t dead_q = NULL;
 semaphore_t dead_sem = NULL;
+int sys_time = 0;
 
 int clean_up(){
   interrupt_level_t l;
@@ -206,6 +207,7 @@ minithread_yield() {
 void 
 clock_handler(void* arg) {
   minithread_yield();
+  sys_time += 1;
 }
 
 
