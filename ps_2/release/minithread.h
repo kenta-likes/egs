@@ -12,7 +12,7 @@
 #define __MINITHREAD_H__
 
 #include "machineprimitives.h"
-#include "queue.h"
+#include "multilevel_queue.h"
 #define RUNNABLE 0
 #define BLOCKED 1
 #define RUNNING 2
