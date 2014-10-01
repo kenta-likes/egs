@@ -72,7 +72,7 @@ int scheduler() {
   minithread_t temp = NULL;
  
   while (1) {
-    l = set_interrupt_level(DISABLED); 
+    set_interrupt_level(DISABLED); 
     //dequeue from runnable threads
     next_priority = choose_priority_level();
     if (multilevel_queue_dequeue(runnable_q,
