@@ -18,6 +18,8 @@ typedef struct alarm *alarm_t;
 typedef struct alarm_node *alarm_node_t;
 typedef struct alarm_list *alarm_list_t;
 
+int alarm_list_len(alarm_list_t a_list);
+
 /*
  * wrapper function for setting alarm with system time information.
  */
@@ -35,6 +37,6 @@ int deregister_alarm(alarm_id id);
 
 void execute_alarm();
 
-void init_alarm();
+alarm_list_t init_alarm();
 
 #endif
