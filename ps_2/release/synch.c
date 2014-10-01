@@ -45,11 +45,15 @@ semaphore_t semaphore_create() {
  *      Deallocate a semaphore.
  */
 void semaphore_destroy(semaphore_t sem) {
+  interrupt_level_t l;
+
   // check if sem is a valid arg
   if (sem == NULL) return;
   
+  l = set_interrupt_level(DISABLED); 
   queue_free(sem->wait_q);
   free(sem); 
+  set_interrupt_level(l);
 }
 
 
@@ -58,14 +62,11 @@ void semaphore_destroy(semaphore_t sem) {
  *      initialize the semaphore data structure pointed at by
  *      sem with an initial value cnt.
  */
-void semaphore_initialize(semaphore_t sem, int cnt) {
+void semaphore_initialize(semaphore_t sem, int cnt) { 
   // check if sem is a valid arg
-  interrupt_level_t l;
   if (sem == NULL) return;
   
-  l = set_interrupt_level(DISABLED);
   sem->count = cnt;
-  set_interrupt_level(l);
 }
 
 void semaphore_block(semaphore_t sem) {
@@ -80,7 +81,9 @@ void semaphore_P(semaphore_t sem) {
   interrupt_level_t l;
 
   l = set_interrupt_level(DISABLED);
-  if (--sem->count < 0) semaphore_block(sem);
+  if (--sem->count < 0) {
+    semaphore_block(sem);
+  }
   set_interrupt_level(l);
 }
 
@@ -97,6 +100,8 @@ void semaphore_V(semaphore_t sem) {
   interrupt_level_t l;
 
   l = set_interrupt_level(DISABLED);
-  if (++sem->count <= 0) semaphore_unblock(sem);
+  if (++sem->count <= 0) {
+    semaphore_unblock(sem);
+  }
   set_interrupt_level(l);
 }
