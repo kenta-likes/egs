@@ -243,7 +243,7 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   runnable_q = queue_new();
   blocked_q = queue_new();
   dead_q = queue_new();
-  
+
   dead_sem = semaphore_create();
   semaphore_initialize(dead_sem,0);    
   clean_up_thread = minithread_create(clean_up, NULL);
