@@ -18,6 +18,9 @@
 #define RUNNING 2
 #define DEAD -1
 
+//simple getter function
+int minithread_priority();
+
 /*
  * struct minithread:
  *  This is the key data structure for the thread management package.

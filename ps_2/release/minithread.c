@@ -32,6 +32,11 @@ queue_t dead_q = NULL;
 semaphore_t dead_sem = NULL;
 int sys_time = 0;
 
+//getter for priority
+int minithread_priority(){
+  return current_thread->priority;
+}
+
 int clean_up(){
   interrupt_level_t l;
 
