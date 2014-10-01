@@ -18,6 +18,7 @@
 typedef struct minithread {
   int id;
   int priority;
+  int rem_quanta;
   stack_pointer_t stackbase;
   stack_pointer_t stacktop;
   int status;
@@ -25,11 +26,26 @@ typedef struct minithread {
 
 int current_id = 0; // the next thread id to be assigned
 minithread_t current_thread = NULL;
-queue_t runnable_q = NULL;
+multilevel_queue_t runnable_q = NULL;
 queue_t blocked_q = NULL;
 queue_t dead_q = NULL;
 semaphore_t dead_sem = NULL;
 int sys_time = 0;
+
+int random_number(int max_num) {
+  srand(time(NULL));
+  return rand() % max_num;
+}
+
+int choose_priority_level() {
+  int num;
+  num = random_number(100);
+
+  if (num < 50) return 0;
+  else if (num < 75) return 1;
+  else if (num < 90) return 2;
+  else return 3;
+}
 
 int clean_up(){
   interrupt_level_t l;
@@ -49,25 +65,23 @@ int clean_up(){
   return -1;
 } 
 
-int scheduler(){
-  interrupt_level_t l;
+int scheduler() {
+  int next_priority = 0;
   minithread_t next = NULL;
   minithread_t temp = NULL;
  
-  while (1){
+  while (1) {
     l = set_interrupt_level(DISABLED); 
     //dequeue from runnable threads
-    if (queue_length(runnable_q) > 0) {
-      if (queue_dequeue(runnable_q, (void**)(&next) ) == -1){
-        set_interrupt_level(l);
-        return -1;
-      }
+    next_priority = choose_priority_level();
+    if (multilevel_queue_dequeue(runnable_q,
+        next_priority,(void**)(&next)) != -1) {
       temp = current_thread;
       current_thread = next;
       minithread_switch(&(temp->stacktop),&(next->stacktop));
       return 0;
     }
-    set_interrupt_level(l);
+    set_interrupt_level(ENABLED);
     //if dead/runnable queue is empty, do nothing (idle thread)
   }
   return 0;
@@ -105,7 +119,8 @@ minithread_fork(proc_t proc, arg_t arg) {
   minithread_t new_thread = minithread_create(proc,arg);
   
   l = set_interrupt_level(DISABLED);
-  queue_append(runnable_q,new_thread); //add to queue
+  multilevel_queue_enqueue(runnable_q,
+    new_thread->priority,new_thread); //add to queue
   set_interrupt_level(l);
 
   return new_thread;
@@ -125,6 +140,7 @@ minithread_create(proc_t proc, arg_t arg) {
   set_interrupt_level(l);
 
   new_thread->priority = 0;
+  new_thread->rem_quanta = 1;
   new_thread->stackbase = NULL;
   new_thread->stacktop =  NULL;
   new_thread->status = RUNNABLE;
@@ -153,8 +169,10 @@ minithread_start(minithread_t t) {
 
   t->status = RUNNABLE;
   
+  t->priority = 0;
+  t->rem_quanta = 1;
   l = set_interrupt_level(DISABLED);
-  queue_append(runnable_q,t);
+  multilevel_queue_enqueue(runnable_q,t->priority,t);
   set_interrupt_level(l); 
 }
 
@@ -187,12 +205,30 @@ minithread_dequeue_and_run(queue_t q) {
 }
 
 void
+minithread_demote_priority() {
+  interrupt_level_t l;
+
+  if (current_thread->priority == 3);
+  else current_thread->priority++;
+  current_thread->rem_quanta = 1 << current_thread->priority;
+  l = set_interrupt_level(DISABLED);
+  multilevel_queue_enqueue(runnable_q,
+      current_thread->priority,current_thread);
+  set_interrupt_level(l);
+  
+  scheduler();
+}
+
+void
 minithread_yield() {
   interrupt_level_t l;
   //put current thread at end of runnable
-
+  
+  current_thread->priority = 0;
+  current_thread->rem_quanta = 1;
   l = set_interrupt_level(DISABLED);
-  queue_append(runnable_q, current_thread);
+  multilevel_queue_enqueue(runnable_q,
+      current_thread->priority,current_thread);
   set_interrupt_level(l);
   
   //call scheduler here
@@ -206,8 +242,11 @@ minithread_yield() {
  */
 void 
 clock_handler(void* arg) {
-  minithread_yield();
+  execute_alarms(sys_time);
   sys_time += 1;
+  if (current_thread->rem_quanta-- == 0) {
+    minithread_demote_priority();
+  }
 }
 
 
@@ -242,14 +281,15 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   dummy_ptr = (void*)&a;
   current_id = 0; // the next thread id to be assigned
   
-  runnable_q = queue_new();
+  runnable_q = multilevel_queue_new(4);
   blocked_q = queue_new();
   dead_q = queue_new();
 
   dead_sem = semaphore_create();
   semaphore_initialize(dead_sem,0);    
   clean_up_thread = minithread_create(clean_up, NULL);
-  queue_append(runnable_q, clean_up_thread);
+  multilevel_queue_enqueue(runnable_q,
+    clean_up_thread->priority,clean_up_thread);
 
   minithread_clock_init(SECOND, (interrupt_handler_t)clock_handler);
   current_thread = minithread_create(mainproc, mainarg);
