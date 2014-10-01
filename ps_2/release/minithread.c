@@ -28,6 +28,7 @@ queue_t runnable_q = NULL;
 queue_t blocked_q = NULL;
 queue_t dead_q = NULL;
 semaphore_t dead_sem = NULL;
+int sys_time = 0;
 
 int clean_up(){
   minithread_t dead = NULL;
@@ -158,6 +159,7 @@ clock_handler(void* arg)
 {
   printf("thread interrupt, thread %i is yielding...\n", current_thread->id);
   minithread_yield();
+  sys_time += 1;
 }
 
 
