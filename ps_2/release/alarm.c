@@ -25,6 +25,10 @@ typedef struct alarm{
 
 alarm_list_t a_list;
 
+int alarm_list_len(alarm_list_t a_list){
+    return a_list->len;
+}
+
 alarm_id
 set_alarm(int delay, alarm_handler_t alarm, void* arg, int reg_time ){
     alarm_t new_alarm;
@@ -40,7 +44,9 @@ set_alarm(int delay, alarm_handler_t alarm, void* arg, int reg_time ){
     }
     //initialize..
     new_node->alarm = new_alarm;
+    new_node->next = NULL;
     curr_hd = a_list->head;
+
     if (a_list->len == 0){
         //make new node head since list was empty
         a_list->head = new_node;
@@ -52,7 +58,7 @@ set_alarm(int delay, alarm_handler_t alarm, void* arg, int reg_time ){
     } else {
         //add new node to right place in sorted list
         while (curr_hd->next != NULL &&
-                curr_hd->next->alarm->reg_time +
+                    curr_hd->next->alarm->reg_time +
                     curr_hd->next->alarm->delay - reg_time < delay){
            curr_hd = curr_hd->next; 
         }
@@ -90,6 +96,10 @@ deregister_alarm(alarm_id alarm)
 {
     alarm_node_t curr_hd;
     alarm_node_t tmp;
+    //if null alarm, return 0
+    if (alarm == NULL){
+        return 0;
+    }
     //if list empty, alarm was executed
     if (a_list->len == 0){
         return 1;
@@ -102,13 +112,12 @@ deregister_alarm(alarm_id alarm)
         //free(curr_hd->alarm->alarm_func_arg);
         free(curr_hd->alarm);
         free(curr_hd);
+
         a_list->head = tmp;
         a_list->len--;
-        printf("dereg bc head is alarm\n");
         return 0;
     }
-    while (curr_hd->next != NULL && (alarm_id)(curr_hd->alarm) != alarm){
-        printf("iterating through list\n");
+    while (curr_hd->next != NULL && (alarm_id)(curr_hd->next->alarm) != alarm){
         curr_hd = curr_hd->next;
     }
     //could not find, alarm was executed previously
@@ -120,7 +129,6 @@ deregister_alarm(alarm_id alarm)
         free(curr_hd->next);
         curr_hd->next = tmp;
         a_list->len--;
-        printf("dereg bc found somewhere in list\n");
         return 0;
     }
 }
@@ -136,8 +144,6 @@ void execute_alarm(int sys_time){
         ( (curr_hd->alarm)->alarm_func )( (curr_hd->alarm)->alarm_func_arg);
         tmp = curr_hd;
         curr_hd = curr_hd->next;
-        free(tmp->alarm->alarm_func);
-        free(tmp->alarm->alarm_func_arg);
         free(tmp->alarm);
         free(tmp);
         a_list->len--;
@@ -146,10 +152,12 @@ void execute_alarm(int sys_time){
     return;
 }
 
-void init_alarm(){
+alarm_list_t
+init_alarm(){
     a_list = (alarm_list_t)malloc(sizeof(alarm_list));
     a_list->len = 0;
     a_list->head = NULL;
+    return a_list;
 }
 
 /*
