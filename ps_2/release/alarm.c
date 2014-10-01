@@ -133,9 +133,11 @@ deregister_alarm(alarm_id alarm)
     }
 }
 
-void execute_alarm(int sys_time){
+void execute_alarms(int sys_time){
     alarm_node_t curr_hd;
     alarm_node_t tmp;
+    //printf("executing...system time is %d\n", sys_time);
+
     curr_hd = a_list->head;
     //iterate to find all alarms that need to be executed
     //free each node and alarm and func/func arg after execution

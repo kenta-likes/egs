@@ -35,7 +35,7 @@ alarm_id register_alarm(int delay, alarm_handler_t func, void *arg);
  */
 int deregister_alarm(alarm_id id);
 
-void execute_alarm();
+void execute_alarms();
 
 alarm_list_t init_alarm();
 

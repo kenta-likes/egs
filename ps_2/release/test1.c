@@ -25,6 +25,16 @@ herro_world(void* arg){
 int
 thread(int* arg) {
   printf("Hello, world!\n");
+  minithread_sleep_with_timeout(1);
+  printf("Hello, world!\n");
+  minithread_sleep_with_timeout(1);
+  printf("Hello, world!\n");
+  minithread_sleep_with_timeout(1);
+  printf("Hello, world!\n");
+  minithread_sleep_with_timeout(1);
+  printf("Hello, world!\n");
+  minithread_sleep_with_timeout(1);
+  printf("Hello, world!\n");
 
   return 0;
 }
