@@ -14,6 +14,7 @@
 #include "synch.h"
 #include <assert.h>
 #include "unistd.h"
+#include "alarm.h"
 
 typedef struct minithread {
   int id;
@@ -67,7 +68,7 @@ int scheduler(){
       minithread_switch(&(temp->stacktop),&(next->stacktop));
       return 0;
     }
-    set_interrupt_level(l);
+    set_interrupt_level(ENABLED);
     //if dead/runnable queue is empty, do nothing (idle thread)
   }
   return 0;
@@ -206,16 +207,26 @@ minithread_yield() {
  */
 void 
 clock_handler(void* arg) {
-  minithread_yield();
+  execute_alarms(sys_time);
   sys_time += 1;
+  minithread_yield();
 }
 
+void
+wake_up(void* sem){
+  semaphore_V((semaphore_t)sem);
+}
 
 /*
  * sleep with timeout in milliseconds
  */
 void 
 minithread_sleep_with_timeout(int delay){
+  semaphore_t thread_sem;
+  thread_sem = semaphore_create();
+  set_alarm(delay, wake_up, (void*)thread_sem, sys_time);
+  semaphore_P(thread_sem);
+  semaphore_destroy(thread_sem);
 }
 
 /*
@@ -252,6 +263,7 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   queue_append(runnable_q, clean_up_thread);
 
   minithread_clock_init(SECOND, (interrupt_handler_t)clock_handler);
+  init_alarm();
   current_thread = minithread_create(mainproc, mainarg);
   minithread_switch(&dummy_ptr, &(current_thread->stacktop));
   return;

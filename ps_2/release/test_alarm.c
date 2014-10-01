@@ -40,7 +40,7 @@ test_alarms(int* arg){
   tmp2 = set_alarm(10, print_alarm, (void*)1, sys_time);
   assert(deregister_alarm(tmp2) == 0);
   printf("deregister unexecuted alarm....SUCCESS\n");
-  execute_alarm(sys_time + 1);
+  execute_alarms(sys_time + 1);
   assert(deregister_alarm(tmp1) == 1);
   printf("deregister executed alarm......SUCCESS\n");
 
@@ -63,7 +63,7 @@ test_alarms(int* arg){
   printf("add 10 alarms consecutively....SUCCESS\n");
 
   while (sys_time != STOP){
-    execute_alarm(sys_time);
+    execute_alarms(sys_time);
     sys_time++;
   }
   printf("execute 7 alarms...............SUCCESS\n");
