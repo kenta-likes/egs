@@ -17,6 +17,7 @@
 
 typedef struct minithread {
   int id;
+  int priority;
   stack_pointer_t stackbase;
   stack_pointer_t stacktop;
   int status;
@@ -31,33 +32,42 @@ semaphore_t dead_sem = NULL;
 int sys_time = 0;
 
 int clean_up(){
-  minithread_t dead = NULL;
+  interrupt_level_t l;
 
+  minithread_t dead = NULL;
   while (1){
     semaphore_P(dead_sem);
-    if ( queue_dequeue(dead_q, (void**)(&dead)) == -1 ){
+    l = set_interrupt_level(DISABLED);
+    if (queue_dequeue(dead_q, (void**)(&dead)) == -1){
+      set_interrupt_level(l);
       return -1;
     }
     minithread_free_stack(dead->stackbase);
     free(dead);
+    set_interrupt_level(l);
   }
   return -1;
 } 
 
 int scheduler(){
+  interrupt_level_t l;
   minithread_t next = NULL;
-  minithread_t tmp = NULL;
+  minithread_t temp = NULL;
+ 
   while (1){
+    l = set_interrupt_level(DISABLED); 
     //dequeue from runnable threads
-    if ( queue_length(runnable_q) > 0 ){
+    if (queue_length(runnable_q) > 0) {
       if (queue_dequeue(runnable_q, (void**)(&next) ) == -1){
+        set_interrupt_level(l);
         return -1;
       }
-      tmp = current_thread;
+      temp = current_thread;
       current_thread = next;
-      minithread_switch(&(tmp->stacktop), &( next->stacktop));
+      minithread_switch(&(temp->stacktop),&(next->stacktop));
       return 0;
     }
+    set_interrupt_level(l);
     //if dead/runnable queue is empty, do nothing (idle thread)
   }
   return 0;
@@ -74,8 +84,14 @@ int scheduler(){
 
 int
 minithread_exit(minithread_t completed) {
+  interrupt_level_t l;
+
   current_thread->status = DEAD;
+  
+  l = set_interrupt_level(DISABLED);
   queue_append(dead_q, current_thread);
+  set_interrupt_level(l);
+
   semaphore_V(dead_sem);
   scheduler();
   while(1);
@@ -84,18 +100,31 @@ minithread_exit(minithread_t completed) {
  
 minithread_t
 minithread_fork(proc_t proc, arg_t arg) {
+  interrupt_level_t l;
+
   minithread_t new_thread = minithread_create(proc,arg);
-  queue_append(runnable_q, new_thread);//add to queue
+  
+  l = set_interrupt_level(DISABLED);
+  queue_append(runnable_q,new_thread); //add to queue
+  set_interrupt_level(l);
+
   return new_thread;
 }
 
 minithread_t
 minithread_create(proc_t proc, arg_t arg) {
+  interrupt_level_t l;
+
   minithread_t new_thread = (minithread_t)malloc(sizeof(minithread));
   if (new_thread == NULL){
     return NULL;
   }
+
+  l = set_interrupt_level(DISABLED);
   new_thread->id = current_id++;
+  set_interrupt_level(l);
+
+  new_thread->priority = 0;
   new_thread->stackbase = NULL;
   new_thread->stacktop =  NULL;
   new_thread->status = RUNNABLE;
@@ -120,21 +149,37 @@ minithread_stop() { minithread_enqueue_and_schedule(blocked_q); }
 
 void
 minithread_start(minithread_t t) {
+  interrupt_level_t l;
+
   t->status = RUNNABLE;
-  queue_append(runnable_q, t);
+  
+  l = set_interrupt_level(DISABLED);
+  queue_append(runnable_q,t);
+  set_interrupt_level(l); 
 }
 
 void
 minithread_enqueue_and_schedule(queue_t q) {
+  interrupt_level_t l;
+ 
   current_thread->status = BLOCKED;
+  
+  l = set_interrupt_level(DISABLED);
   queue_append(q, current_thread);
+  set_interrupt_level(l);
+
   scheduler();
 }
 
 void
 minithread_dequeue_and_run(queue_t q) {
+  interrupt_level_t l;
   minithread_t blocked_thread = NULL;
+
+  l = set_interrupt_level(DISABLED);
   queue_dequeue(q, (void**)(&blocked_thread) );
+  set_interrupt_level(l);
+
   if (blocked_thread->status != BLOCKED) {
     printf("thread %d should have status BLOCKED\n", minithread_id());
   }
@@ -143,8 +188,13 @@ minithread_dequeue_and_run(queue_t q) {
 
 void
 minithread_yield() {
+  interrupt_level_t l;
   //put current thread at end of runnable
+
+  l = set_interrupt_level(DISABLED);
   queue_append(runnable_q, current_thread);
+  set_interrupt_level(l);
+  
   //call scheduler here
   scheduler();
 }
@@ -155,9 +205,7 @@ minithread_yield() {
  * function as parameter in minithread_system_initialize
  */
 void 
-clock_handler(void* arg)
-{
-  printf("thread interrupt, thread %i is yielding...\n", current_thread->id);
+clock_handler(void* arg) {
   minithread_yield();
   sys_time += 1;
 }
@@ -199,7 +247,7 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   dead_q = queue_new();
   
   dead_sem = semaphore_create();
-  semaphore_initialize(dead_sem, 0);  
+  semaphore_initialize(dead_sem,0);    
   clean_up_thread = minithread_create(clean_up, NULL);
   queue_append(runnable_q, clean_up_thread);
 
