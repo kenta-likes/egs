@@ -27,6 +27,9 @@ multilevel_queue_t multilevel_queue_new(int number_of_levels)
   multilevel_queue_t new_multi_q = NULL;
   node_t tail = NULL;
   
+  // check that number_of_level valid
+  if (number_of_levels < 1) return NULL;
+  
   new_multi_q = (multilevel_queue_t)malloc(sizeof(multilevel_queue));
   
   // check for error
@@ -39,13 +42,14 @@ multilevel_queue_t multilevel_queue_new(int number_of_levels)
   for (i = 0; i < number_of_levels; i++) {
     new_node = (node_t)malloc(sizeof(node));
     new_q = queue_new();
-    
+  
     // check for error
     if (new_node == NULL || new_q == NULL) return NULL;
     
+    new_node->queue = new_q;
+
     // check if currently no levels
     if (new_multi_q->head == NULL) {
-      new_node->queue = new_q;
       new_node->next = new_node;
       new_multi_q->head = new_node;
     }
@@ -74,11 +78,10 @@ int multilevel_queue_enqueue(multilevel_queue_t multi_q, int level, void* item)
   
   // we know this multi_q has at least one level
   curr_node = multi_q->head;
-  while (curr_level < level) curr_node = curr_node->next;
+  while (curr_level++ < level) curr_node = curr_node->next;
   
   // enqueue at correct level and check for error
   if (queue_append(curr_node->queue,item) == -1) return -1;
-  
   multi_q->count++;
   return 0;
 }
@@ -107,8 +110,12 @@ int multilevel_queue_dequeue(multilevel_queue_t multi_q, int level, void** item)
 
   for (i = 0; i < multi_q->num_levels; i++) {
     // no items at this level
-    if (queue_length(curr_node->queue) == 0) continue;
-    
+    if (queue_length(curr_node->queue) == 0) {  
+      level = (level + 1) % multi_q->num_levels;
+      curr_node = curr_node->next;
+      continue;
+    }
+
     // failed dequeue
     else if (queue_dequeue(curr_node->queue,item) == -1) {
       return -1;
@@ -119,8 +126,6 @@ int multilevel_queue_dequeue(multilevel_queue_t multi_q, int level, void** item)
       multi_q->count--;
       return level;
     }
-    level = (level + 1) % multi_q->num_levels;
-    curr_node = curr_node->next;
   }
 
   return -1;
@@ -140,11 +145,10 @@ int multilevel_queue_free(multilevel_queue_t multi_q)
   
   curr = multi_q->head;
   for (i = 0; i < multi_q->num_levels; i++) {
-    if (queue_free(curr->queue) == -1) return -1;
-    
     temp = curr;
     curr = curr->next;
-    free(curr);
+    if (queue_free(temp->queue) == -1) return -1;
+    free(temp);
   }
   
   free(multi_q);  
