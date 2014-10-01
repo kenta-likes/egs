@@ -1,3 +1,4 @@
+test_alarm
 multilevel_queue_test
 shop
 queue_test
@@ -28,3 +29,4 @@ test2.o
 test3.o
 shop.o
 alarm.o
+test_alarm.o

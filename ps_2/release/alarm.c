@@ -17,29 +17,22 @@ typedef struct alarm_list{
 } alarm_list;
 
 typedef struct alarm{
-    int alarm_time;
+    int reg_time;
+    int delay;
     alarm_handler_t alarm_func;
     void* alarm_func_arg;
 } alarm;
 
 alarm_list_t a_list;
 
-/* see alarm.h */
 alarm_id
-register_alarm(int delay, alarm_handler_t alarm, void *arg)
-{
+set_alarm(int delay, alarm_handler_t alarm, void* arg, int reg_time ){
     alarm_t new_alarm;
     alarm_node_t new_node;
     alarm_node_t curr_hd;
 
-    new_alarm = (alarm_t)malloc(sizeof(alarm));
-    if (!new_alarm){
-        return NULL;
-    }
-    //initialize...
-    new_alarm->alarm_time = delay;
-    new_alarm->alarm_func = alarm;
-    new_alarm->alarm_func_arg = arg;
+    new_alarm = (alarm_t)register_alarm(delay,alarm, arg);
+    new_alarm->reg_time = reg_time;
 
     new_node = (alarm_node_t)malloc(sizeof(alarm_node));
     if (!new_node){
@@ -47,23 +40,45 @@ register_alarm(int delay, alarm_handler_t alarm, void *arg)
     }
     //initialize..
     new_node->alarm = new_alarm;
+    curr_hd = a_list->head;
     if (a_list->len == 0){
         //make new node head since list was empty
         a_list->head = new_node;
-    } else if (a_list->head->alarm->alarm_time > delay){
+    } else if (curr_hd->alarm->reg_time +
+            curr_hd->alarm->delay - reg_time > delay){
         //make new node head since old head was later
-        new_node->next = a_list->head;
+        new_node->next = curr_hd;
         a_list->head = new_node;
     } else {
         //add new node to right place in sorted list
-        curr_hd = a_list->head;
         while (curr_hd->next != NULL &&
-                curr_hd->next->alarm->alarm_time < delay){
+                curr_hd->next->alarm->reg_time +
+                    curr_hd->next->alarm->delay - reg_time < delay){
            curr_hd = curr_hd->next; 
         }
         new_node->next = curr_hd->next;
         curr_hd->next = new_node;
     }
+    a_list->len += 1;
+    return new_alarm;
+}
+
+/* see alarm.h */
+alarm_id
+register_alarm(int delay, alarm_handler_t alarm, void *arg)
+{
+    alarm_t new_alarm;
+
+    new_alarm = (alarm_t)malloc(sizeof(alarm));
+    if (!new_alarm){
+        return NULL;
+    }
+
+    //initialize...
+    new_alarm->delay = delay;
+    new_alarm->alarm_func = alarm;
+    new_alarm->alarm_func_arg = arg;
+
     return new_alarm;
 }
 
@@ -83,15 +98,17 @@ deregister_alarm(alarm_id alarm)
     //if head is alarm, free it and return 0
     if ( (alarm_id)(curr_hd->alarm) == alarm ){
         tmp = curr_hd->next;
-        free(curr_hd->alarm->alarm_func);
-        free(curr_hd->alarm->alarm_func_arg);
+        //free(curr_hd->alarm->alarm_func);
+        //free(curr_hd->alarm->alarm_func_arg);
         free(curr_hd->alarm);
         free(curr_hd);
         a_list->head = tmp;
         a_list->len--;
+        printf("dereg bc head is alarm\n");
         return 0;
     }
     while (curr_hd->next != NULL && (alarm_id)(curr_hd->alarm) != alarm){
+        printf("iterating through list\n");
         curr_hd = curr_hd->next;
     }
     //could not find, alarm was executed previously
@@ -99,12 +116,11 @@ deregister_alarm(alarm_id alarm)
         return 1;
     } else {
         tmp = curr_hd->next->next;
-        free(curr_hd->next->alarm->alarm_func);
-        free(curr_hd->next->alarm->alarm_func_arg);
         free(curr_hd->next->alarm);
         free(curr_hd->next);
         curr_hd->next = tmp;
         a_list->len--;
+        printf("dereg bc found somewhere in list\n");
         return 0;
     }
 }
@@ -115,7 +131,8 @@ void execute_alarm(int sys_time){
     curr_hd = a_list->head;
     //iterate to find all alarms that need to be executed
     //free each node and alarm and func/func arg after execution
-    while (curr_hd != NULL && curr_hd->alarm->alarm_time < sys_time){
+    while (curr_hd != NULL && curr_hd->alarm->reg_time +
+                curr_hd->alarm->delay == sys_time){
         ( (curr_hd->alarm)->alarm_func )( (curr_hd->alarm)->alarm_func_arg);
         tmp = curr_hd;
         curr_hd = curr_hd->next;

@@ -18,6 +18,11 @@ typedef struct alarm *alarm_t;
 typedef struct alarm_node *alarm_node_t;
 typedef struct alarm_list *alarm_list_t;
 
+/*
+ * wrapper function for setting alarm with system time information.
+ */
+alarm_id set_alarm(int delay, alarm_handler_t func, void *arg, int sys_time);
+
 /* register an alarm to go off in "delay" milliseconds.  Returns a handle to
  * the alarm.
  */
