@@ -29,6 +29,12 @@ typedef struct alarm{
 //global list containing all alarms
 alarm_list_t a_list;
 
+//gives length of alarm
+int
+alarm_list_len(alarm_list_t a_list){
+    return a_list->len;
+}
+
 //adds a new alarm node into the alarm list
 //takes in delay in clock ticks (not seconds)
 //reg_time is the time the alarm was set at,

@@ -319,7 +319,7 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   multilevel_queue_enqueue(runnable_q,
     clean_up_thread->priority,clean_up_thread);
 
-  minithread_clock_init(MILLISECOND * 10, (interrupt_handler_t)clock_handler);
+  minithread_clock_init(TIME_QUANTA, (interrupt_handler_t)clock_handler);
   init_alarm();
   current_thread = minithread_create(mainproc, mainarg);
   minithread_switch(&dummy_ptr, &(current_thread->stacktop));
