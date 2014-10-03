@@ -17,7 +17,7 @@ typedef struct multilevel_queue {
 } multilevel_queue; 
 
 /*
- * Returns an empty multilevel queue with number_of_levels levels. On error should return NULL.
+ * Returns an empty multilevel queue with number_of_levels levels. On error should return NULL. An input of 0 levels is considered an error since such a queue could not hold any elements.
  */
 multilevel_queue_t multilevel_queue_new(int number_of_levels)
 {
@@ -98,7 +98,7 @@ int multilevel_queue_dequeue(multilevel_queue_t multi_q, int level, void** item)
   node_t curr_node = NULL;
   
   // check if queue empty
-  if (multi_q->count == 0) {
+  if (multi_q == NULL || multi_q->count == 0) {
     *item = NULL;
     return -1;
   }

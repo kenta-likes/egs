@@ -164,7 +164,8 @@ queue_free (queue_t queue) {
  */
 int
 queue_length(queue_t queue) {
-    return queue->len;
+  if (queue == NULL) return -1;  
+  return queue->len;
 }
 
 

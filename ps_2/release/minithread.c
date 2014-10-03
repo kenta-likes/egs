@@ -16,6 +16,8 @@
 #include "unistd.h"
 #include "alarm.h"
 
+#define LOWEST_PRIORITY 3
+
 typedef struct minithread {
   int id;
   int priority;
@@ -214,7 +216,7 @@ void
 minithread_demote_priority() {
   interrupt_level_t l;
 
-  if (current_thread->priority == 3);
+  if (current_thread->priority == LOWEST_PRIORITY);
   else current_thread->priority++;
   current_thread->rem_quanta = 1 << current_thread->priority;
   l = set_interrupt_level(DISABLED);
@@ -250,7 +252,7 @@ void
 clock_handler(void* arg) {
   execute_alarms(sys_time);
   sys_time += 1;
-  if (current_thread->rem_quanta-- == 0) {
+  if (--(current_thread->rem_quanta) == 0) {
     minithread_demote_priority();
   }
 }
