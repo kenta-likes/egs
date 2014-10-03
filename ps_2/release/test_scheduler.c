@@ -22,27 +22,30 @@ test_scheduler_io(int* arg){
   return 0;
 }
 
-int fork_bomb(int i, int j){
-  if (i == 0 || j == 0){
-    return 0;
+int fork_bomb(int* i){
+  while (i == 0){
+    minithread_yield();
   } 
-  return i + j + fork_bomb(i-1,j) + fork_bomb(i,j-1);
+  minithread_fork(fork_bomb, (void*)(((long)i)-1));
+  while (1){
+    minithread_yield();
+  };
+  return 0;
 }
 
 int
 test_scheduler_cpu(int* arg){
-  long i;
-  long count;
-  minithread_fork(test_scheduler_io, NULL);
-
-  count = 0;
-  for (i = 0; i < LONG_MAX/10; i++){
-    fork_bomb( 1, 1);
-    count += minithread_priority();
-    minithread_yield();
+  //long i;
+  float i = 0;
+  float j = .5;
+  //long count;
+  minithread_fork(fork_bomb, (void*)10);
+  while (1) {
+    printf("cpu_bound being called from priority %d.\n",minithread_priority());
+    i += j;
+    j /= 2;
   }
-  assert((float)count / i >=  3.0);
-  printf("cpu bound fits schedule\n");
+  //assert((float)count / i >=  3.0);
   return 0;
 }
 
