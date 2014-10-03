@@ -232,8 +232,6 @@ minithread_yield() {
   interrupt_level_t l;
   //put current thread at end of runnable
   
-  current_thread->priority = 0;
-  current_thread->rem_quanta = 1;
   l = set_interrupt_level(DISABLED);
   multilevel_queue_enqueue(runnable_q,
       current_thread->priority,current_thread);
