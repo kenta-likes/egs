@@ -18,8 +18,11 @@
 #define RUNNING 2
 #define DEAD -1
 
-//simple getter function
+//simple getter function for priority of thread
 int minithread_priority();
+
+//simple getter function for system time
+int minithread_time();
 
 /*
  * struct minithread:

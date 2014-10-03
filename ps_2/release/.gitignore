@@ -1,3 +1,4 @@
+shop_preemp
 test_scheduler
 test_alarm
 multilevel_queue_test
@@ -32,3 +33,4 @@ shop.o
 alarm.o
 test_alarm.o
 test_scheduler.o
+shop_preemp.o

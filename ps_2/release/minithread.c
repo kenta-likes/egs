@@ -34,10 +34,15 @@ queue_t blocked_q = NULL;
 queue_t dead_q = NULL;
 semaphore_t dead_sem = NULL;
 int sys_time = 0;
+const int TIME_QUANTA = 100 * MILLISECOND;
 
 //getter for priority
 int minithread_priority(){
   return current_thread->priority;
+}
+
+int minithread_time(){
+  return sys_time;
 }
 
 int random_number(int max_num) {
@@ -250,8 +255,9 @@ minithread_yield() {
  */
 void 
 clock_handler(void* arg) {
-  execute_alarms(sys_time);
   sys_time += 1;
+  printf("systime is %i\n", sys_time);
+  execute_alarms(sys_time);
   if (--(current_thread->rem_quanta) == 0) {
     minithread_demote_priority();
   }
@@ -268,8 +274,15 @@ wake_up(void* sem){
 void 
 minithread_sleep_with_timeout(int delay){
   semaphore_t thread_sem;
+  int num_cycles;
+
+  if (delay % TIME_QUANTA == 0){
+    num_cycles = delay / TIME_QUANTA;
+  } else {
+    num_cycles = (delay / TIME_QUANTA) + 1;
+  }
   thread_sem = semaphore_create();
-  set_alarm(delay, wake_up, (void*)thread_sem, sys_time);
+  set_alarm(num_cycles, wake_up, (void*)thread_sem, sys_time);
   semaphore_P(thread_sem);
   semaphore_destroy(thread_sem);
 }
@@ -308,7 +321,7 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   multilevel_queue_enqueue(runnable_q,
     clean_up_thread->priority,clean_up_thread);
 
-  minithread_clock_init(SECOND, (interrupt_handler_t)clock_handler);
+  minithread_clock_init(MILLISECOND * 10, (interrupt_handler_t)clock_handler);
   init_alarm();
   current_thread = minithread_create(mainproc, mainarg);
   minithread_switch(&dummy_ptr, &(current_thread->stacktop));

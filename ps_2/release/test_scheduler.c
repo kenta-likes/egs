@@ -29,7 +29,7 @@ int fork_bomb(int* i){
   minithread_fork(fork_bomb, (void*)(((long)i)-1));
   while (1){
     minithread_yield();
-  };
+  }
   return 0;
 }
 
@@ -39,9 +39,12 @@ test_scheduler_cpu(int* arg){
   float i = 0;
   float j = .5;
   //long count;
-  minithread_fork(fork_bomb, (void*)10);
+  //minithread_fork(fork_bomb, (void*)10);
   while (1) {
-    printf("cpu_bound being called from priority %d.\n",minithread_priority());
+    if (minithread_priority() == 3){
+      printf("bananas\n");
+    }
+    //printf("cpu_bound being called from priority %d.\n",minithread_priority());
     i += j;
     j /= 2;
   }

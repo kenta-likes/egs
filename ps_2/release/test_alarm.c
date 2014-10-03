@@ -8,7 +8,6 @@
 #include <stdlib.h>
 #include <assert.h>
 
-int sys_time;
 
 void
 print_alarm(void* arg){
@@ -16,8 +15,15 @@ print_alarm(void* arg){
 }
 
 int
+test_long_alarm(int* arg){
+  minithread_sleep_with_timeout(4000);
+  printf("printing something\n");
+  return 0;
+}
+
+/*
+int
 test_alarms(int* arg){
-  int STOP = 100;
   alarm_id tmp1;
   alarm_id tmp2;
   alarm_id tmp3;
@@ -28,21 +34,15 @@ test_alarms(int* arg){
   alarm_id tmp8;
   alarm_id tmp9;
   alarm_id tmp10;
+  alarm_id tmp_long;
   alarm_list_t a_list;
 
   sys_time = 0;
   a_list = init_alarm();
 
-  assert(deregister_alarm(NULL) == 0);
-  printf("deregister null alarm..........SUCCESS\n");
 
   tmp1 = set_alarm(1, print_alarm, (void*)((long)sys_time + 1), sys_time);
   tmp2 = set_alarm(10, print_alarm, (void*)1, sys_time);
-  assert(deregister_alarm(tmp2) == 0);
-  printf("deregister unexecuted alarm....SUCCESS\n");
-  execute_alarms(sys_time + 1);
-  assert(deregister_alarm(tmp1) == 1);
-  printf("deregister executed alarm......SUCCESS\n");
 
   tmp1 = set_alarm(10, print_alarm, (void*)1, sys_time);//t = 10
   sys_time += 3;
@@ -59,34 +59,21 @@ test_alarms(int* arg){
   tmp9 = set_alarm(1000, print_alarm, (void*)9, sys_time);// t = 1007
   tmp10 = set_alarm(500, print_alarm, (void*)10, sys_time);// t = 507
 
-  assert(alarm_list_len(a_list) == 10);
+  tmp_long = set_alarm(4000, print_alarm, (void*)11, sys_time);// t = 4007
+
   printf("add 10 alarms consecutively....SUCCESS\n");
 
-  while (sys_time != STOP){
-    execute_alarms(sys_time);
-    sys_time++;
+  while (1){
   }
-  printf("execute 7 alarms...............SUCCESS\n");
-  assert(deregister_alarm(tmp1) == 1);
-  assert(deregister_alarm(tmp2) == 1);
-  printf("deregister executed alarms.....SUCCESS\n");
-
-  assert(alarm_list_len(a_list) == 3);
-  printf("check remaining alarms.........SUCCESS\n");
-
-  assert(deregister_alarm(tmp8) == 0);
-  assert(deregister_alarm(tmp9) == 0);
-  assert(deregister_alarm(tmp10) == 0);
-  printf("deregister unexecuted alarms...SUCCESS\n");
-
 
   free(a_list);
   return 0;
 }
+*/
 
 
 int
 main(void) {
-  test_alarms(NULL);
+  minithread_system_initialize(test_long_alarm, NULL);
   return 0;
 }
