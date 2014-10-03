@@ -1,6 +1,7 @@
 shop_preemp
 test_scheduler
 test_alarm
+test_sleep
 multilevel_queue_test
 shop
 queue_test
