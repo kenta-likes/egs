@@ -8,20 +8,22 @@
 #include <stdlib.h>
 #include <assert.h>
 
+int sys_time
 
 void
 print_alarm(void* arg){
   printf("Set off alarm %li\n", (long)arg);
 }
 
+/*
 int
 test_long_alarm(int* arg){
   minithread_sleep_with_timeout(4000);
   printf("printing something\n");
   return 0;
 }
+*/
 
-/*
 int
 test_alarms(int* arg){
   alarm_id tmp1;
@@ -69,7 +71,6 @@ test_alarms(int* arg){
   free(a_list);
   return 0;
 }
-*/
 
 
 int
