@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <limits.h>
 
+/*
 int
 test_scheduler_io(int* arg){
   long i;
@@ -48,26 +49,52 @@ int fork_bomb(int* lv){
   //while (1);
   return 0;
 }
-/*
-int
-test_scheduler_cpu(int* arg){
-  float i = 0;
-  float j = .5;
-
-  //fun way to calculate 1 yerrr
-  while (1) {
-    if (minithread_priority() == 3){
-      printf("bananas\n");
-    }
-    i += j;
-    j /= 2;
-  }
-  return 0;
-}
 */
 
 int
+run_sleep_threads(int* arg){
+  if ((long)arg == 1){
+    minithread_sleep_with_timeout((long)arg * 1000);
+    printf("Thread %li woke up!\n", (long)arg);
+    return 0;
+  }
+  minithread_fork(run_sleep_threads, (void*)(((long)arg)-1));
+  minithread_sleep_with_timeout((long)arg * 1000);
+  printf("Thread %li woke up!\n", (long)arg);
+  return 0;
+}
+
+int
+run_threads(int* arg){
+  if ((long)arg == 0){
+    while (1){ //CPU bound task, so loop forever
+      if (minithread_priority() == 3){
+        printf("yoloswag. Thread %li hit the lowest priority queue.\n", (long)arg);
+        //while (1);
+        return 0;
+      }
+    }
+  }
+  minithread_fork(run_threads, (void*)(((long)arg)-1));
+  while (1){ //CPU bound task, so loop forever
+    if (minithread_priority() == 3){
+      printf("yoloswag. Thread %li hit the lowest priority queue.\n", (long)arg);
+      //while (1);
+      return 0;
+    }
+  }
+  return 0;
+}
+
+int
+run_scheduler_test(int* arg){
+  minithread_fork(run_threads, (int*)10);
+  minithread_fork(run_sleep_threads, (int*)10 );
+  return 0;
+}
+
+int
 main(void) {
-  minithread_system_initialize(fork_bomb, (int*)10);
+  minithread_system_initialize(run_scheduler_test, NULL);
   return 0;
 }

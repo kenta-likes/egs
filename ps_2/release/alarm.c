@@ -75,7 +75,7 @@ set_alarm(int delay, alarm_handler_t alarm, void* arg, int reg_time ){
         while (curr_hd->next != NULL &&
                     curr_hd->next->alarm->reg_time +
                     curr_hd->next->alarm->delay - reg_time < delay){
-           curr_hd = curr_hd->next; 
+           curr_hd = curr_hd->next;
         }
         new_node->next = curr_hd->next;
         curr_hd->next = new_node;
@@ -136,6 +136,7 @@ deregister_alarm(alarm_id alarm)
         a_list->len--;
         return 0;
     }
+    //search for the alarm...
     while (curr_hd->next != NULL && (alarm_id)(curr_hd->next->alarm) != alarm){
         curr_hd = curr_hd->next;
     }
@@ -143,6 +144,7 @@ deregister_alarm(alarm_id alarm)
     if (curr_hd->next == NULL){
         return 1;
     } else {
+        //found the alarm to free, so free it
         tmp = curr_hd->next->next;
         free(curr_hd->next->alarm);
         free(curr_hd->next);

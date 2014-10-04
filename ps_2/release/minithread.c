@@ -254,7 +254,7 @@ minithread_yield() {
 void 
 clock_handler(void* arg) {
   sys_time += 1;
-  printf("systime is %i\n", sys_time);
+  //printf("systime is %i\n", sys_time);
   execute_alarms(sys_time);
   if (--(current_thread->rem_quanta) == 0) {
     minithread_demote_priority();
@@ -274,11 +274,10 @@ minithread_sleep_with_timeout(int delay){
   semaphore_t thread_sem;
   int num_cycles;
 
-  if (delay % TIME_QUANTA == 0){
-    num_cycles = delay / TIME_QUANTA;
-  } else {
-    num_cycles = (delay / TIME_QUANTA) + 1;
-  }
+  delay *= MILLISECOND;//convert to proper unit
+
+  num_cycles = delay % TIME_QUANTA == 0? delay/TIME_QUANTA : delay / TIME_QUANTA + 1;
+
   thread_sem = semaphore_create();
   set_alarm(num_cycles, wake_up, (void*)thread_sem, sys_time);
   semaphore_P(thread_sem);
