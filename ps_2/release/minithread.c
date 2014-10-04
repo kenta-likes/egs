@@ -87,9 +87,10 @@ int scheduler() {
   int next_priority = 0;
   minithread_t next = NULL;
   minithread_t temp = NULL;
-  
+   
   while (1) {
-    while (runnable_count == 0);
+    set_interrupt_level(ENABLED);
+    while (runnable_count == 0){};
     //dequeue from runnable threads
     next_priority = choose_priority_level();
     set_interrupt_level(DISABLED);
@@ -101,7 +102,6 @@ int scheduler() {
       minithread_switch(&(temp->stacktop),&(next->stacktop));
       return 0;
     }
-    set_interrupt_level(ENABLED);
     //if dead/runnable queue is empty, do nothing (idle thread)
   }
   return 0;
@@ -262,7 +262,6 @@ clock_handler(void* arg) {
 
   l = set_interrupt_level(DISABLED);
   sys_time += 1;
-  //printf("systime is %i\n", sys_time);
   execute_alarms(sys_time);
   if (--(current_thread->rem_quanta) == 0) {
     set_interrupt_level(l);
@@ -287,9 +286,7 @@ minithread_sleep_with_timeout(int delay){
   semaphore_t thread_sem;
   int num_cycles;
 
-  delay *= MILLISECOND;//convert to proper unit
-
-  num_cycles = delay % TIME_QUANTA == 0? delay/TIME_QUANTA : delay / TIME_QUANTA + 1;
+  num_cycles = delay % (TIME_QUANTA/MILLISECOND) == 0? delay/(TIME_QUANTA/MILLISECOND) : delay / (TIME_QUANTA/MILLISECOND) + 1;
 
   thread_sem = semaphore_create();
   l = set_interrupt_level(DISABLED);

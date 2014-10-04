@@ -70,7 +70,6 @@ run_threads(int* arg){
     while (1){ //CPU bound task, so loop forever
       if (minithread_priority() == 3){
         printf("yoloswag. Thread %li hit the lowest priority queue.\n", (long)arg);
-        //while (1);
         return 0;
       }
     }
@@ -79,7 +78,6 @@ run_threads(int* arg){
   while (1){ //CPU bound task, so loop forever
     if (minithread_priority() == 3){
       printf("yoloswag. Thread %li hit the lowest priority queue.\n", (long)arg);
-      //while (1);
       return 0;
     }
   }
@@ -88,8 +86,8 @@ run_threads(int* arg){
 
 int
 run_scheduler_test(int* arg){
-  minithread_fork(run_threads, (int*)10);
   minithread_fork(run_sleep_threads, (int*)10 );
+  minithread_fork(run_threads, (int*)10);
   return 0;
 }
 
