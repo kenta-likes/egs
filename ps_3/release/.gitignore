@@ -42,3 +42,12 @@ test_alarm.o
 test_sleep.o
 test_scheduler.o
 shop_preemp.o
+network1.o
+network2.o
+network3.o
+network4.o
+network5.o
+network6.o
+miniheader.o
+minimsg.o
+network.o
