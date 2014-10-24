@@ -1,0 +1,13 @@
+Name: Benedict Wang (bhw44)
+Name: Kenta Labur (kl459)
+
+No broken functionality (yay!)
+
+Tests mostly cover simple cases, and does two main checks:
+1. Test if CPU bound threads all eventually reach the lowest priority queue.
+2. Test if threads sleep for expected amounts of times
+Both of these test cases are covered in "test_scheduler.c"
+In addition, we have unit tests for multilevel queue and alarms in "multilevel_queue_test.c" and "test_alarm.c"
+
+Valgrind tests:
+We have 8200 bytes of "definitely lost" memory but we believe this comes from clock init since removing clock init resolved our memory leaks during our early development.
