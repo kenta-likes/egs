@@ -8,6 +8,12 @@ queue_test
 test1
 test2
 test3
+network1
+network2
+network3
+network4
+network5
+network6
 buffer
 sieve
 .depend
@@ -36,3 +42,13 @@ test_alarm.o
 test_sleep.o
 test_scheduler.o
 shop_preemp.o
+network1.o
+network2.o
+network3.o
+network4.o
+network5.o
+network6.o
+miniheader.o
+minimsg.o
+network.o
+>>>>>>> 5cc15f8ef03c489c2aa791105c2f787660113b5b
