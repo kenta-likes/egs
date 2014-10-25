@@ -90,11 +90,13 @@ int scheduler() {
   minithread_t temp = NULL;
    
   while (1) {
-    set_interrupt_level(ENABLED);
-    while (runnable_count == 0){};
+    while (runnable_count == 0) {
+      set_interrupt_level(ENABLED);
+    };
+    
+    set_interrupt_level(DISABLED);
     //dequeue from runnable threads
     next_priority = choose_priority_level();
-    set_interrupt_level(DISABLED);
     if (multilevel_queue_dequeue(runnable_q,
         next_priority,(void**)(&next)) != -1) {
       runnable_count--;
@@ -224,20 +226,22 @@ minithread_dequeue_and_run(queue_t q) {
   minithread_start(blocked_thread);
 }
 
+/**
+ * minithread_demote_priority is called from the clock handler.
+ * Interrupts are already disabled when this function is called so mutual exclusion gauranteed.
+ * This threads priority is decreased, its quanta replenished, placed back on runnable queue
+ * and the scheduler is invoked.
+ **/
 void
 minithread_demote_priority() {
-  interrupt_level_t l;
-
   if (current_thread->priority == LOWEST_PRIORITY);
   else current_thread->priority++;
   current_thread->rem_quanta = 1 << current_thread->priority;
 
-  l = set_interrupt_level(DISABLED);
   if (multilevel_queue_enqueue(runnable_q,
       current_thread->priority,current_thread) == 0) {
     runnable_count++;
   }
-  set_interrupt_level(l);
   scheduler();
 }
 
@@ -262,7 +266,10 @@ minithread_yield() {
 /*
  * This is the clock interrupt handling routine.
  * You have to call minithread_clock_init with this
- * function as parameter in minithread_system_initialize
+ * function as parameter in minithread_system_initialize.
+ * If this thread has exhausted its quanta, this its priority is decreased
+ * and the scheduler is invoked. In this case, interrupts are not re-enabled in this function
+ * but when the scheduler switches to another thread.
  */
 void 
 clock_handler(void* arg) {
@@ -272,7 +279,6 @@ clock_handler(void* arg) {
   sys_time += 1;
   execute_alarms(sys_time);
   if (--(current_thread->rem_quanta) == 0) {
-    set_interrupt_level(l);
     minithread_demote_priority();
   }
   else {
