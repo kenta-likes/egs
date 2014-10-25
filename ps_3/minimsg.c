@@ -247,9 +247,12 @@ miniport_destroy(miniport_t miniport)
  * data payload bytes sent not inclusive of the header.
  */
 int
-minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg_t msg, int len)
-{
-    return 0;
+minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg_t msg, int len) {
+  char new_header[21];
+
+  new_header[0] = PROTOCOL_MINIDATAGRAM;
+  *((long*)&new_header[1]) = *((long*)my_addr);
+  return 0;
 }
 
 /* Receives a message through a locally unbound port. Threads that call this function are
