@@ -339,14 +339,14 @@ int minimsg_receive(miniport_t local_unbound_port, miniport_t* new_local_bound_p
     return -1;
   }
   //block until packet arrives
-  semaphore_P(local_unbound_port->m_port.miniport_unbound.port_pkt_available_sem);
+  semaphore_P(local_unbound_port->u.unbound.port_pkt_available_sem);
 
-  semaphore_P(local_unbound_port->m_port.miniport_unbound.q_lock);
-  if( queue_dequeue(local_unbound_port->m_port.miniport_unbound.port_pkt_q,
+  semaphore_P(local_unbound_port->u.unbound.q_lock);
+  if( queue_dequeue(local_unbound_port->u.unbound.port_pkt_q,
                   (void**)&pkt)){
     return -1;
   }
-  semaphore_V(local_unbound_port->m_port.miniport_unbound.q_lock);
+  semaphore_V(local_unbound_port->u.unbound.q_lock);
 
   pkt_header = (mini_header_t)(&pkt->buffer);
   protocol = pkt_header->protocol;
