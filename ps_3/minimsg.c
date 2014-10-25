@@ -22,12 +22,13 @@ union port_union{
   struct miniport_bound
   {
     unsigned short dest_num;//the remote unbound port number this sends to
-    semaphore_t q_lock;//binary semaphore for mutual exclusion
+    network_address_t dest_addr;//the remote address
   } miniport_bound;
 };
 
 struct miniport{
   enum port_type p_type;
+  unsigned short p_num;
   union port_union m_port;
 };
 
@@ -51,6 +52,8 @@ queue_t pkt_q;                  // buffer for holding recieved packets for the s
                                 // protected by disabling interrupts
 semaphore_t pkt_available_sem;  // counting sem for the number of packets available
 
+unsigned short curr_bound_index;
+
 
 /* performs any required initialization of the minimsg layer.
  */
@@ -59,6 +62,7 @@ minimsg_initialize() {
   unsigned int i;
   
   network_get_my_address(my_addr); //init my_addr
+  curr_bound_index = BOUND_PORT_START;
   miniport_array = (miniport_t*)malloc((MAX_PORT_NUM)*sizeof(miniport_t));
   if (miniport_array == NULL) {
     return;
@@ -188,18 +192,22 @@ miniport_create_unbound(int port_number) {
   semaphore_P(unbound_ports_lock);
   new_port = (miniport_t)malloc(sizeof(struct miniport)); 
   if (new_port == NULL) {
+    semaphore_V(unbound_ports_lock);
     return NULL;
   }
   new_port->p_type = UNBOUND_PORT;
+  new_port->p_num = port_number;
   new_port->m_port.miniport_unbound.port_pkt_q = queue_new();
   if (!new_port->m_port.miniport_unbound.port_pkt_q) {
     free(new_port);
+    semaphore_V(unbound_ports_lock);
     return NULL;
   }
   new_port->m_port.miniport_unbound.port_pkt_available_sem = semaphore_create();
   if (!new_port->m_port.miniport_unbound.port_pkt_available_sem) {
     queue_free(new_port->m_port.miniport_unbound.port_pkt_q);
     free(new_port);
+    semaphore_V(unbound_ports_lock);
     return NULL;
   } 
   new_port->m_port.miniport_unbound.q_lock = semaphore_create();
@@ -207,10 +215,13 @@ miniport_create_unbound(int port_number) {
     queue_free(new_port->m_port.miniport_unbound.port_pkt_q);
     semaphore_destroy(new_port->m_port.miniport_unbound.port_pkt_available_sem);
     free(new_port);
+    semaphore_V(unbound_ports_lock);
     return NULL;
   }
   semaphore_initialize(new_port->m_port.miniport_unbound.port_pkt_available_sem,0);
   semaphore_initialize(new_port->m_port.miniport_unbound.q_lock,1);
+  miniport_array[port_number] = new_port;
+  semaphore_V(unbound_ports_lock);
   return new_port;
    
 }
@@ -226,7 +237,36 @@ miniport_create_unbound(int port_number) {
 miniport_t
 miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
 {
-    return 0;
+  unsigned short start;
+  miniport_t new_port;
+
+  start = curr_bound_index;
+  while (miniport_array[curr_bound_index] != NULL){
+    curr_bound_index += 1;
+    if (curr_bound_index >= MAX_PORT_NUM){
+      curr_bound_index = BOUND_PORT_START;
+    }
+    if (curr_bound_index == start){ //bound port array full
+      return NULL;
+    }
+  }
+  semaphore_P(bound_ports_lock);
+  new_port = (miniport_t)malloc(sizeof(struct miniport)); 
+  if (new_port == NULL) {
+    semaphore_V(bound_ports_lock);
+    return NULL;
+  }
+  new_port->p_type = BOUND_PORT;
+  new_port->p_num = curr_bound_index;
+  new_port->m_port.miniport_bound.dest_num = remote_unbound_port_number;
+  network_address_copy(addr, new_port->m_port.miniport_bound.dest_addr);
+  miniport_array[curr_bound_index] = new_port;
+  curr_bound_index += 1; //point to next slot
+  if (curr_bound_index >= MAX_PORT_NUM){
+    curr_bound_index = BOUND_PORT_START;
+  }
+  semaphore_V(bound_ports_lock);
+  return new_port;
 }
 
 /* Destroys a miniport and frees up its resources. If the miniport was in use at
@@ -235,6 +275,23 @@ miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
 void
 miniport_destroy(miniport_t miniport)
 {
+  if (miniport == NULL
+      || miniport->p_num >= MAX_PORT_NUM
+      || (miniport->p_type != UNBOUND_PORT && miniport->p_type != BOUND_PORT )){
+    return;
+  }
+  if (miniport->p_type == UNBOUND_PORT){
+    semaphore_P(unbound_ports_lock);
+    queue_free(miniport->m_port.miniport_unbound.port_pkt_q);
+    semaphore_destroy(miniport->m_port.miniport_unbound.port_pkt_available_sem);
+    semaphore_destroy(miniport->m_port.miniport_unbound.q_lock);
+    free(miniport);
+    semaphore_V(unbound_ports_lock);
+  } else {
+    semaphore_P(bound_ports_lock);
+    free(miniport);
+    semaphore_V(bound_ports_lock);
+  }
 }
 
 /* Sends a message through a locally bound port (the bound port already has an associated
