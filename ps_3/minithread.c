@@ -300,9 +300,8 @@ void network_handler(network_interrupt_arg_t* pkt){
     set_interrupt_level(l);
     return;
   }
-
-  semaphore_V(pkt_available_sem); //wake up packet processor
   set_interrupt_level(l);
+  semaphore_V(pkt_available_sem); //wake up packet processor
   return;
 }
 
