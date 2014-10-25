@@ -8,6 +8,8 @@
  *      the exact arguments in the prototypes.
  */
 #include "network.h"
+#include "synch.h"
+#include "queue.h"
 
 /* The maximum size of a minimsg.
  * Must be <= MAX_NETWORK_PKT_SIZE - NETWORK_HDR_SIZE

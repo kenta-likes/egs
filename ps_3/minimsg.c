@@ -2,21 +2,78 @@
  *  Implementation of minimsgs and miniports.
  */
 #include "minimsg.h"
-#include "queue.h"
+#include <stdlib.h>
 
-struct miniport
-{
-    unsigned short port_num;
-    queue_t pkt_q;
+#define MAX_PORT_NUM 65536
+#define UNBOUND_PORT_START 0 
+#define BOUND_PORT_START 32768
+
+enum port_type { UNBOUND_PORT = 1, BOUND_PORT};
+
+union port_union{
+  struct miniport_unbound
+  {
+    unsigned short port_num;//the local port number
+    queue_t packet_q;//queue for packets
+    semaphore_t port_sem;//counting semaphore for thread blocking
+    semaphore_t port_lock;//binary semaphore for mutual exclusion
+  } miniport_unbound;
+  struct miniport_bound
+  {
+    unsigned short port_num;//the local port number
+    unsigned short dest_num;//the remote unbound port number this sends to
+    semaphore_t port_lock;//binary semaphore for mutual exclusion
+  } miniport_bound;
 };
 
-struct miniport* miniport_array;
+struct miniport{
+  enum port_type p_type;
+  union port_union m_port;
+};
+
+miniport_t* miniport_array;     // this array contains pointers to miniports
+                                // where the index corresponds to the port number
+                                // null if the port at that index has not been created
+semaphore_t bound_ports_lock;   // this lock ensures mutual exclusion for creating
+                                // or destroying bound ports
+semaphore_t unbound_ports_lock; // this lock ensures mutual exclusion for creating
+                                // or destroying unbound ports
+
+queue_t pkt_q;                  // buffer for holding recieved packets for the system
+                                // process_packets_thread takes from this queue
+                                // and puts the processed packet into the intended unbound port
+                                // protected by disabling interrupts
+semaphore_t pkt_available_sem;  // counting sem for the number of packets available
 
 /* performs any required initialization of the minimsg layer.
  */
 void
-minimsg_initialize()
-{
+minimsg_initialize() {
+  unsigned int i;
+  
+  miniport_array = (miniport_t*)malloc((MAX_PORT_NUM)*sizeof(miniport_t));
+  for (i = 0; i < MAX_PORT_NUM; i++) {
+    miniport_array[i] = 0;
+  }
+  
+  bound_ports_lock = semaphore_create();
+  semaphore_initialize(bound_ports_lock,1);
+  unbound_ports_lock = semaphore_create();
+  semaphore_initialize(unbound_ports_lock,1);
+  
+  pkt_q = queue_new();
+  pkt_available_sem = semaphore_create();
+  semaphore_initialize(pkt_available_sem,0);  
+}
+
+void process_packets(){
+  while (1) {
+    semaphore_P(pkt_available_sem);
+    
+    //DROP DA BASE
+    //JUUUUUMPP ONNNN ITTT
+  }
+
 }
 
 /* Creates an unbound port for listening. Multiple requests to create the same
