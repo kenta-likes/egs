@@ -312,6 +312,9 @@ minithread_sleep_with_timeout(int delay){
  *       Fork the thread which should call mainproc(mainarg)
  *       Start scheduling.
  *
+ *       Note that the runnable_q is protected by disabling interrupts.
+ *       All other data structures are protected with binary semaphores.
+ *
  */
 void
 minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
