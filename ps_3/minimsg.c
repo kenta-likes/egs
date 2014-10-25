@@ -139,7 +139,7 @@ int process_packets() {
         }
         //if port DNE or not an unbound port, fail
         if (miniport_array[dst_port_num] == NULL ||
-            miniport_array[dst_port_num]->p_type != UNBOUND_PORT ) {
+            miniport_array[dst_port_num]->p_type != UNBOUND_PORT) {
           free(pkt);
           continue;
         }
@@ -270,15 +270,18 @@ miniport_destroy(miniport_t miniport)
       || (miniport->p_type != UNBOUND_PORT && miniport->p_type != BOUND_PORT )){
     return;
   }
-  if (miniport->p_type == UNBOUND_PORT){
+  if (miniport->p_type == UNBOUND_PORT) {
     semaphore_P(unbound_ports_lock);
+    miniport_array[miniport->p_num] = NULL;
     queue_free(miniport->u.unbound.port_pkt_q);
     semaphore_destroy(miniport->u.unbound.port_pkt_available_sem);
     semaphore_destroy(miniport->u.unbound.q_lock);
     free(miniport);
     semaphore_V(unbound_ports_lock);
-  } else {
+  } 
+  else {
     semaphore_P(bound_ports_lock);
+    miniport_array[miniport->p_num] = NULL;
     free(miniport);
     semaphore_V(bound_ports_lock);
   }
