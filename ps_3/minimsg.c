@@ -13,23 +13,23 @@
 enum port_type { UNBOUND_PORT = 1, BOUND_PORT};
 
 union port_union{
-  struct miniport_unbound
+  struct unbound
   {
     queue_t port_pkt_q;//queue for packets
     semaphore_t port_pkt_available_sem;//counting semaphore for thread blocking
     semaphore_t q_lock;//binary semaphore for mutual exclusion
-  } miniport_unbound;
-  struct miniport_bound
+  } unbound;
+  struct bound
   {
     unsigned short dest_num;//the remote unbound port number this sends to
     network_address_t dest_addr;//the remote address
-  } miniport_bound;
+  } bound;
 };
 
 struct miniport{
   enum port_type p_type;
   unsigned short p_num;
-  union port_union m_port;
+  union port_union u;
 };
 
 /**
@@ -94,13 +94,14 @@ void process_packets() {
   network_interrupt_arg_t* pkt;
   char protocol;
   network_address_t src_addr;
+  
+  struct mini_header header; 
   unsigned short src_port_num;
   network_address_t dst_addr;
   unsigned short dst_port_num;
   //char message_type;
   //unsigned int seq_number;
   //unsigned int ack_number; // TCP
-  char* buff;
   miniport_t dst_port;
 
   while (1) {
@@ -109,35 +110,24 @@ void process_packets() {
     if (queue_dequeue(pkt_q, (void**)&pkt)){
       //dequeue fails
       set_interrupt_level(l);
-      continue;//move on with life
+      continue; //move on with life
     }
     set_interrupt_level(l);
 
     //perform checks on packet, free & return if invalid
-    protocol = (char)unpack_unsigned_short(pkt->buffer);
+    protocol = pkt->buffer[0];
     if (protocol != PROTOCOL_MINIDATAGRAM &&
           protocol != PROTOCOL_MINISTREAM){
       free(pkt);
       continue;
     } 
     else {
-      //JUMP ON IT
-      buff = (char*)(&pkt->buffer);
-      /* rewrite the unpacked data so that it may be accessed later */
-      *buff = protocol;
-      buff++;
-      unpack_address(buff, src_addr);
-      *((long*)buff) = *((long*)src_addr);
-      buff += 8;
-      src_port_num = unpack_unsigned_short(buff);
-      *((unsigned short*)buff) = *((unsigned short*)src_addr);
-      buff += 2;
-      unpack_address(buff, dst_addr);
-      *((long*)buff) = *((long*)src_addr);
-      buff += 8;
-      dst_port_num = unpack_unsigned_short(buff);
-      *((unsigned short*)buff) = *((unsigned short*)src_addr);
-      buff += 2;
+      // JUMP ON IT
+      header = *((mini_header_t)(&pkt->buffer));
+      unpack_address(header.source_address, src_addr);
+      src_port_num = unpack_unsigned_short(header.source_port);
+      unpack_address(header.destination_address, dst_addr);
+      dst_port_num = unpack_unsigned_short(header.destination_port);
 
       if (protocol == PROTOCOL_MINIDATAGRAM){
         //check address
@@ -154,13 +144,13 @@ void process_packets() {
           continue;
         }
         dst_port = miniport_array[dst_port_num]; 
-        semaphore_P(dst_port->m_port.miniport_unbound.q_lock);
-        queue_append(dst_port->m_port.miniport_unbound.port_pkt_q,pkt);
-        semaphore_V(dst_port->m_port.miniport_unbound.q_lock);
-        semaphore_V(dst_port->m_port.miniport_unbound.port_pkt_available_sem);
+        semaphore_P(dst_port->u.unbound.q_lock);
+        queue_append(dst_port->u.unbound.port_pkt_q,pkt);
+        semaphore_V(dst_port->u.unbound.q_lock);
+        semaphore_V(dst_port->u.unbound.port_pkt_available_sem);
         continue;
       }
-      else if (protocol == PROTOCOL_MINISTREAM){
+      else if (protocol == PROTOCOL_MINISTREAM) {
         free(pkt);
         continue; //for now, ignore tcp packets
       }
@@ -197,29 +187,29 @@ miniport_create_unbound(int port_number) {
   }
   new_port->p_type = UNBOUND_PORT;
   new_port->p_num = port_number;
-  new_port->m_port.miniport_unbound.port_pkt_q = queue_new();
-  if (!new_port->m_port.miniport_unbound.port_pkt_q) {
+  new_port->u.unbound.port_pkt_q = queue_new();
+  if (!new_port->u.unbound.port_pkt_q) {
     free(new_port);
     semaphore_V(unbound_ports_lock);
     return NULL;
   }
-  new_port->m_port.miniport_unbound.port_pkt_available_sem = semaphore_create();
-  if (!new_port->m_port.miniport_unbound.port_pkt_available_sem) {
-    queue_free(new_port->m_port.miniport_unbound.port_pkt_q);
+  new_port->u.unbound.port_pkt_available_sem = semaphore_create();
+  if (!new_port->u.unbound.port_pkt_available_sem) {
+    queue_free(new_port->u.unbound.port_pkt_q);
     free(new_port);
     semaphore_V(unbound_ports_lock);
     return NULL;
   } 
-  new_port->m_port.miniport_unbound.q_lock = semaphore_create();
-  if (!new_port->m_port.miniport_unbound.q_lock) {
-    queue_free(new_port->m_port.miniport_unbound.port_pkt_q);
-    semaphore_destroy(new_port->m_port.miniport_unbound.port_pkt_available_sem);
+  new_port->u.unbound.q_lock = semaphore_create();
+  if (!new_port->u.unbound.q_lock) {
+    queue_free(new_port->u.unbound.port_pkt_q);
+    semaphore_destroy(new_port->u.unbound.port_pkt_available_sem);
     free(new_port);
     semaphore_V(unbound_ports_lock);
     return NULL;
   }
-  semaphore_initialize(new_port->m_port.miniport_unbound.port_pkt_available_sem,0);
-  semaphore_initialize(new_port->m_port.miniport_unbound.q_lock,1);
+  semaphore_initialize(new_port->u.unbound.port_pkt_available_sem,0);
+  semaphore_initialize(new_port->u.unbound.q_lock,1);
   miniport_array[port_number] = new_port;
   semaphore_V(unbound_ports_lock);
   return new_port;
@@ -258,8 +248,8 @@ miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
   }
   new_port->p_type = BOUND_PORT;
   new_port->p_num = curr_bound_index;
-  new_port->m_port.miniport_bound.dest_num = remote_unbound_port_number;
-  network_address_copy(addr, new_port->m_port.miniport_bound.dest_addr);
+  new_port->u.bound.dest_num = remote_unbound_port_number;
+  network_address_copy(addr, new_port->u.bound.dest_addr);
   miniport_array[curr_bound_index] = new_port;
   curr_bound_index += 1; //point to next slot
   if (curr_bound_index >= MAX_PORT_NUM){
@@ -282,9 +272,9 @@ miniport_destroy(miniport_t miniport)
   }
   if (miniport->p_type == UNBOUND_PORT){
     semaphore_P(unbound_ports_lock);
-    queue_free(miniport->m_port.miniport_unbound.port_pkt_q);
-    semaphore_destroy(miniport->m_port.miniport_unbound.port_pkt_available_sem);
-    semaphore_destroy(miniport->m_port.miniport_unbound.q_lock);
+    queue_free(miniport->u.unbound.port_pkt_q);
+    semaphore_destroy(miniport->u.unbound.port_pkt_available_sem);
+    semaphore_destroy(miniport->u.unbound.q_lock);
     free(miniport);
     semaphore_V(unbound_ports_lock);
   } else {
@@ -305,11 +295,18 @@ miniport_destroy(miniport_t miniport)
  */
 int
 minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg_t msg, int len) {
-  char new_header[21];
+  struct mini_header hdr;
+  network_address_t dst_addr;
 
-  new_header[0] = PROTOCOL_MINIDATAGRAM;
-  *((long*)&new_header[1]) = *((long*)my_addr);
-  return 0;
+  network_address_copy(local_bound_port->u.bound.dest_addr, dst_addr); 
+  hdr.protocol = PROTOCOL_MINIDATAGRAM;
+  pack_address(hdr.source_address, my_addr);
+  pack_unsigned_short(hdr.source_port, local_unbound_port->p_num);
+  pack_address(hdr.destination_address, local_bound_port->u.bound.dest_addr);
+  pack_unsigned_short(hdr.destination_port, local_bound_port->u.bound.dest_num);
+  
+  network_send_pkt(dst_addr, sizeof(hdr),(char*)&hdr, len, msg);
+  return len;
 }
 
 /* Receives a message through a locally unbound port. Threads that call this function are
