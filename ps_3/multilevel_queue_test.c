@@ -7,15 +7,13 @@
 #include "assert.h"
 
 int main(void) {
-  long x1, x2, x3, x4, x5, x6, val;
+  long x1, x2, x3, x4, val;
   multilevel_queue_t multi_q = NULL;
   val = 0;
   x1 = 1;
   x2 = 2;
   x3 = 3;
   x4 = 4;
-  x5 = 5;
-  x6 = 6;
 
   multi_q = multilevel_queue_new(0);
   assert(multi_q == NULL);
