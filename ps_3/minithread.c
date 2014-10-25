@@ -15,6 +15,8 @@
 #include <assert.h>
 #include "unistd.h"
 #include "alarm.h"
+#include "network.h"
+#include "minimsg.h"
 
 #define LOWEST_PRIORITY 3
 
@@ -277,6 +279,28 @@ clock_handler(void* arg) {
     set_interrupt_level(l);
   }
 }
+
+/**
+ *  Network handler function which gets called whenever packet
+ *  arrives. Handler disables interrupts for duration of function.
+ *  Puts packet onto pkt_q to be processed later by process_packets
+ *  thread.
+ */
+void network_handler(network_interrupt_arg_t* pkt){
+  interrupt_level_t l;
+
+  l = set_interrupt_level(DISABLED);
+  if (queue_append(pkt_q, pkt)){
+    //queue was not initialized
+    set_interrupt_level(l);
+    return;
+  }
+
+  semaphore_V(pkt_available_sem); //wake up packet processor
+  set_interrupt_level(l);
+  return;
+}
+
 
 void
 wake_up(void* sem){
