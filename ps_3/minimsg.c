@@ -335,7 +335,8 @@ int minimsg_receive(miniport_t local_unbound_port, miniport_t* new_local_bound_p
 
   if (local_unbound_port == NULL
         || local_unbound_port->p_type != UNBOUND_PORT
-        || local_unbound_port->p_num >= BOUND_PORT_START){
+        || local_unbound_port->p_num >= BOUND_PORT_START
+        || miniport_array[local_unbound_port->p_num] != local_unbound_port){
     return -1;
   }
   //block until packet arrives
