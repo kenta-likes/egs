@@ -87,6 +87,7 @@ transmit(int* arg) {
         sprintf(buffer, "Count for receiver 2 is %d.\n", i+1);
         length = strlen(buffer) + 1;
         minimsg_send(port2, write_port2, buffer, length);
+        minithread_sleep_with_timeout(200);
     }
 
     return 0;
