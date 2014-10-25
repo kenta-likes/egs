@@ -89,7 +89,7 @@ minimsg_initialize() {
  * port to be queued up. If the destination port
  * is not initialized, the packet is thrown away.
  */
-void process_packets() {
+int process_packets() {
   interrupt_level_t l;
   network_interrupt_arg_t* pkt;
   char protocol;
@@ -158,7 +158,7 @@ void process_packets() {
     //DROP DA BASE
     //JUUUUUMPP ONNNN ITTT
   }
-
+  return -1;
 }
 
 /* Creates an unbound port for listening. Multiple requests to create the same
@@ -291,12 +291,32 @@ miniport_destroy(miniport_t miniport)
  * The msg parameter is a pointer to a data payload that the user wishes to send and does not
  * include a network header; your implementation of minimsg_send must construct the header
  * before calling network_send_pkt(). The return value of this function is the number of
- * data payload bytes sent not inclusive of the header.
+ * data payload bytes sent not inclusive of the header. Returns -1 on error.
+ * Fails if msg is too long. 
  */
 int
 minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg_t msg, int len) {
   struct mini_header hdr;
   network_address_t dst_addr;
+  
+  if (len > MINIMSG_MAX_MSG_SIZE) {
+    return -1;
+  }
+
+  if (local_unbound_port == NULL || 
+      local_unbound_port->p_type != UNBOUND_PORT || 
+      local_unbound_port->p_num >= BOUND_PORT_START ||
+      miniport_array[local_unbound_port->p_num] != local_unbound_port) {
+    return -1;
+  }
+
+  if (local_bound_port == NULL ||
+      local_bound_port->p_type != BOUND_PORT ||
+      local_bound_port->p_num < BOUND_PORT_START ||
+      miniport_array[local_bound_port->p_num] != local_bound_port) {
+    return -1;
+  }
+
 
   network_address_copy(local_bound_port->u.bound.dest_addr, dst_addr); 
   hdr.protocol = PROTOCOL_MINIDATAGRAM;
@@ -305,7 +325,9 @@ minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg
   pack_address(hdr.destination_address, local_bound_port->u.bound.dest_addr);
   pack_unsigned_short(hdr.destination_port, local_bound_port->u.bound.dest_num);
   
-  network_send_pkt(dst_addr, sizeof(hdr),(char*)&hdr, len, msg);
+  if (network_send_pkt(dst_addr, sizeof(hdr), (char*)&hdr, len, msg)) {
+    return -1;
+  }
   return len;
 }
 
@@ -329,7 +351,6 @@ int minimsg_receive(miniport_t local_unbound_port, miniport_t* new_local_bound_p
   network_address_t src_addr;
   unsigned short src_port;
   network_address_t dst_addr;
-  unsigned short dst_port;
   int i;
   char* buff;
 
@@ -354,7 +375,6 @@ int minimsg_receive(miniport_t local_unbound_port, miniport_t* new_local_bound_p
   unpack_address(pkt_header->source_address, src_addr);
   src_port = unpack_unsigned_short(pkt_header->source_port);
   unpack_address(pkt_header->destination_address, dst_addr);
-  dst_port = unpack_unsigned_short(pkt_header->destination_port);
 
   if (protocol != PROTOCOL_MINIDATAGRAM
         && protocol != PROTOCOL_MINISTREAM){
@@ -363,7 +383,8 @@ int minimsg_receive(miniport_t local_unbound_port, miniport_t* new_local_bound_p
 
   if (protocol == PROTOCOL_MINISTREAM){
     return 0; //currently unsupported
-  } else { //UDP
+  } 
+  else { //UDP
     if ( pkt->size < sizeof(struct mini_header)){
       return -1;
     }

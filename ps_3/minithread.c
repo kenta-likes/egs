@@ -348,6 +348,7 @@ minithread_sleep_with_timeout(int delay){
 void
 minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   minithread_t clean_up_thread = NULL;
+  minithread_t process_packets_thread = NULL;
   int a = 0;
   void* dummy_ptr = NULL;
   dummy_ptr = (void*)&a;
@@ -367,7 +368,13 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   multilevel_queue_enqueue(runnable_q,
     clean_up_thread->priority,clean_up_thread);
   runnable_count++;
+  minimsg_initialize();
+  process_packets_thread =  minithread_create(process_packets, NULL);
+  multilevel_queue_enqueue(runnable_q,
+    process_packets_thread->priority,process_packets_thread);
+  runnable_count++;
   minithread_clock_init(TIME_QUANTA, (interrupt_handler_t)clock_handler);
+  network_initialize((network_handler_t) network_handler);
   init_alarm();
   current_thread = minithread_create(mainproc, mainarg);
   minithread_switch(&dummy_ptr, &(current_thread->stacktop));
