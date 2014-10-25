@@ -2,11 +2,15 @@
  *  Implementation of minimsgs and miniports.
  */
 #include "minimsg.h"
+#include "queue.h"
 
 struct miniport
 {
-    int dummy; /* you should erase this field and replace it with your definition */
+    unsigned short port_num;
+    queue_t pkt_q;
 };
+
+struct miniport* miniport_array;
 
 /* performs any required initialization of the minimsg layer.
  */
