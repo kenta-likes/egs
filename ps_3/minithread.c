@@ -282,16 +282,13 @@ wake_up(void* sem){
  */
 void 
 minithread_sleep_with_timeout(int delay){
-  interrupt_level_t l;
   semaphore_t thread_sem;
   int num_cycles;
 
   num_cycles = delay % (TIME_QUANTA/MILLISECOND) == 0? delay/(TIME_QUANTA/MILLISECOND) : delay / (TIME_QUANTA/MILLISECOND) + 1;
 
   thread_sem = semaphore_create();
-  l = set_interrupt_level(DISABLED);
   set_alarm(num_cycles, wake_up, (void*)thread_sem, sys_time);
-  set_interrupt_level(l);
   semaphore_P(thread_sem);
   semaphore_destroy(thread_sem);
 }

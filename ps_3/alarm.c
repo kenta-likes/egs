@@ -44,9 +44,13 @@ set_alarm(int delay, alarm_handler_t alarm, void* arg, int reg_time ){
     alarm_t new_alarm;
     alarm_node_t new_node;
     alarm_node_t curr_hd;
+    interrupt_level_t l;
+
+    l = set_interrupt_level(DISABLED);
 
     //NULL checking
     if ( alarm == NULL || a_list == NULL){
+        set_interrupt_level(l);
         return NULL;
     }
 
@@ -55,6 +59,7 @@ set_alarm(int delay, alarm_handler_t alarm, void* arg, int reg_time ){
 
     new_node = (alarm_node_t)malloc(sizeof(alarm_node));
     if (!new_node){
+        set_interrupt_level(l);
         return NULL;
     }
     //initialize..
@@ -81,10 +86,16 @@ set_alarm(int delay, alarm_handler_t alarm, void* arg, int reg_time ){
         curr_hd->next = new_node;
     }
     a_list->len += 1;
+    set_interrupt_level(l);
     return new_alarm;
 }
 
-/* see alarm.h */
+/* see alarm.h 
+ * NOTE: Does not need interrupts disabled because
+ * it does not touch global data structures other
+ * than for error checking purposes. All global
+ * data structure manipulation happens in set_alarm
+ * */
 alarm_id
 register_alarm(int delay, alarm_handler_t alarm, void *arg)
 {
@@ -115,12 +126,18 @@ deregister_alarm(alarm_id alarm)
 {
     alarm_node_t curr_hd;
     alarm_node_t tmp;
+    interrupt_level_t l;
+
+    l = set_interrupt_level(DISABLED);
+
     //if null alarm, return 0
     if (alarm == NULL || a_list == NULL){
+        set_interrupt_level(l);
         return -1;
     }
     //if list empty, alarm was executed
     if (a_list->len == 0){
+        set_interrupt_level(l);
         return 1;
     }
     curr_hd = a_list->head;
@@ -134,6 +151,7 @@ deregister_alarm(alarm_id alarm)
 
         a_list->head = tmp;
         a_list->len--;
+        set_interrupt_level(l);
         return 0;
     }
     //search for the alarm...
@@ -142,6 +160,7 @@ deregister_alarm(alarm_id alarm)
     }
     //could not find, alarm was executed previously
     if (curr_hd->next == NULL){
+        set_interrupt_level(l);
         return 1;
     } else {
         //found the alarm to free, so free it
@@ -150,6 +169,7 @@ deregister_alarm(alarm_id alarm)
         free(curr_hd->next);
         curr_hd->next = tmp;
         a_list->len--;
+        set_interrupt_level(l);
         return 0;
     }
 }
@@ -162,9 +182,12 @@ deregister_alarm(alarm_id alarm)
 void execute_alarms(int sys_time){
     alarm_node_t curr_hd;
     alarm_node_t tmp;
-    //printf("executing...system time is %d\n", sys_time);
+    interrupt_level_t l;
+
+    l = set_interrupt_level(DISABLED);
 
     if (a_list == NULL){
+        set_interrupt_level(l);
         return;
     }
 
@@ -181,6 +204,7 @@ void execute_alarms(int sys_time){
         a_list->len--;
     }
     a_list->head = curr_hd;
+    set_interrupt_level(l);
     return;
 }
 
