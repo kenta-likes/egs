@@ -2,6 +2,8 @@
  *  Implementation of minimsgs and miniports.
  */
 #include "minimsg.h"
+#include "interrupts.h"
+#include "miniheader.h"
 #include <stdlib.h>
 
 #define MAX_PORT_NUM 65536
@@ -31,6 +33,12 @@ struct miniport{
   union port_union m_port;
 };
 
+/**
+ *  Global variables
+ */
+
+network_address_t my_addr;      // my address
+
 miniport_t* miniport_array;     // this array contains pointers to miniports
                                 // where the index corresponds to the port number
                                 // null if the port at that index has not been created
@@ -45,12 +53,14 @@ queue_t pkt_q;                  // buffer for holding recieved packets for the s
                                 // protected by disabling interrupts
 semaphore_t pkt_available_sem;  // counting sem for the number of packets available
 
+
 /* performs any required initialization of the minimsg layer.
  */
 void
 minimsg_initialize() {
   unsigned int i;
   
+  network_get_my_address(my_addr); //init my_addr
   miniport_array = (miniport_t*)malloc((MAX_PORT_NUM)*sizeof(miniport_t));
   for (i = 0; i < MAX_PORT_NUM; i++) {
     miniport_array[i] = 0;
@@ -66,9 +76,73 @@ minimsg_initialize() {
   semaphore_initialize(pkt_available_sem,0);  
 }
 
+
+/**
+ * method for packet processor to repeatedly
+ * check for new packets that arrived and upon
+ * sanity checks forward them to the appropriate
+ * port to be queued up. If the destination port
+ * is not initialized, the packet is thrown away.
+ */
 void process_packets(){
+  interrupt_level_t l;
+  network_interrupt_arg_t* pkt;
+  char protocol;
+  network_address_t source_address;
+  unsigned short source_port;
+  network_address_t destination_address;
+  unsigned short destination_port;
+  //char message_type;
+  //unsigned int seq_number;
+  //unsigned int ack_number; // TCP
+  char* buff;
+
   while (1) {
     semaphore_P(pkt_available_sem);
+    l = set_interrupt_level(DISABLED);
+    if (queue_dequeue(pkt_q, (void**)&pkt)){
+      //dequeue fails
+      set_interrupt_level(l);
+      continue;//move on with life
+    }
+    set_interrupt_level(l);
+
+    //perform checks on packet, free & return if invalid
+    protocol = (char)unpack_unsigned_short(pkt->buffer);
+    if (protocol != PROTOCOL_MINIDATAGRAM &&
+          protocol != PROTOCOL_MINISTREAM){
+      free(pkt);
+      continue;
+    } else {
+      //JUMP ON IT
+      buff = (char*)(&pkt->buffer);
+      buff++;
+      unpack_address(buff, source_address);
+      buff += 8;
+      source_port = unpack_unsigned_short(buff);
+      buff += 2;
+      unpack_address(buff, destination_address);
+      buff += 8;
+      destination_port = unpack_unsigned_short(buff);
+      buff += 2;
+      if (protocol == PROTOCOL_MINIDATAGRAM){
+        //check address
+        if (!network_compare_network_addresses(my_addr, destination_address) ||
+              source_port >= BOUND_PORT_START ||
+              destination_port >= BOUND_PORT_START ){
+          free(pkt);
+          continue;
+        }
+        //overwrite buffer
+        //if port DNE, fail
+        //enqueue network_interrupt_arg_t to appropriate port queue
+        //continue
+      }
+      else if (protocol == PROTOCOL_MINISTREAM){
+        free(pkt);
+        continue; //for now, ignore tcp packets
+      }
+    }
     
     //DROP DA BASE
     //JUUUUUMPP ONNNN ITTT

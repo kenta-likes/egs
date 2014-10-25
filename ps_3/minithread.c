@@ -294,7 +294,6 @@ clock_handler(void* arg) {
  */
 void network_handler(network_interrupt_arg_t* pkt){
   interrupt_level_t l;
-
   l = set_interrupt_level(DISABLED);
   if (queue_append(pkt_q, pkt)){
     //queue was not initialized
