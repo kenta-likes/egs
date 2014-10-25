@@ -21,6 +21,8 @@ typedef char* minimsg_t;
 
 /* performs any required initialization of the minimsg layer.  */
 extern void minimsg_initialize();
+extern queue_t pkt_q;
+extern semaphore_t pkt_available_sem;
 
 /* Creates an unbound port for listening. Multiple requests to create the same
  * unbound port should return the same miniport reference. It is the responsibility
