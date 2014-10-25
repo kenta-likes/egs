@@ -316,9 +316,68 @@ minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg
  * responsibility of this function to strip off and parse the header before returning the
  * data payload and data length via the respective msg and len parameter. The return value
  * of this function is the number of data payload bytes received not inclusive of the header.
+ *
+ * Additional assumptions: since the network handler takes care of unpacking the * header data and overwrites the original header data with the deserialized
+ * values, we can simply cast the msg to a header type if we just want to get
+ * the header data. Of course for payload, we will unpack the data.
  */
 int minimsg_receive(miniport_t local_unbound_port, miniport_t* new_local_bound_port, minimsg_t msg, int *len)
 {
+  network_interrupt_arg_t* pkt;
+  mini_header_t pkt_header;
+  char protocol;
+  network_address_t src_addr;
+  unsigned short src_port;
+  network_address_t dst_addr;
+  unsigned short dst_port;
+  int i;
+  char* buff;
+
+  if (local_unbound_port == NULL
+        || local_unbound_port->p_type != UNBOUND_PORT
+        || local_unbound_port->p_num >= BOUND_PORT_START){
+    return -1;
+  }
+  //block until packet arrives
+  semaphore_P(local_unbound_port->m_port.miniport_unbound.port_pkt_available_sem);
+
+  semaphore_P(local_unbound_port->m_port.miniport_unbound.q_lock);
+  if( queue_dequeue(local_unbound_port->m_port.miniport_unbound.port_pkt_q,
+                  (void**)&pkt)){
+    return -1;
+  }
+  semaphore_V(local_unbound_port->m_port.miniport_unbound.q_lock);
+
+  pkt_header = (mini_header_t)(&pkt->buffer);
+  protocol = pkt_header->protocol;
+  unpack_address(pkt_header->source_address, src_addr);
+  src_port = unpack_unsigned_short(pkt_header->source_port);
+  unpack_address(pkt_header->destination_address, dst_addr);
+  dst_port = unpack_unsigned_short(pkt_header->destination_port);
+
+  if (protocol != PROTOCOL_MINIDATAGRAM
+        && protocol != PROTOCOL_MINISTREAM){
+    return -1;
+  }
+
+  if (protocol == PROTOCOL_MINISTREAM){
+    return 0; //currently unsupported
+  } else { //UDP
+    if ( pkt->size < sizeof(struct mini_header)){
+      return -1;
+    }
+    *len = pkt->size-sizeof(struct mini_header) > *len?
+                  *len : pkt->size-sizeof(struct mini_header);
+    *new_local_bound_port = miniport_create_bound(pkt->sender, src_port);
+    //copy payload
+    buff = (char*)&(pkt->buffer);
+    buff += sizeof(struct mini_header);
+    for (i = 0; i < *len; i++){
+      msg[i] = *buff;
+      buff++;
+    }
+    free(pkt); 
     return 0;
+  }
 }
 
