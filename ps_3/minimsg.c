@@ -15,16 +15,14 @@ enum port_type { UNBOUND_PORT = 1, BOUND_PORT};
 union port_union{
   struct miniport_unbound
   {
-    unsigned short port_num;//the local port number
-    queue_t packet_q;//queue for packets
-    semaphore_t port_sem;//counting semaphore for thread blocking
-    semaphore_t port_lock;//binary semaphore for mutual exclusion
+    queue_t port_pkt_q;//queue for packets
+    semaphore_t port_pkt_available_sem;//counting semaphore for thread blocking
+    semaphore_t q_lock;//binary semaphore for mutual exclusion
   } miniport_unbound;
   struct miniport_bound
   {
-    unsigned short port_num;//the local port number
     unsigned short dest_num;//the remote unbound port number this sends to
-    semaphore_t port_lock;//binary semaphore for mutual exclusion
+    semaphore_t q_lock;//binary semaphore for mutual exclusion
   } miniport_bound;
 };
 
@@ -62,8 +60,11 @@ minimsg_initialize() {
   
   network_get_my_address(my_addr); //init my_addr
   miniport_array = (miniport_t*)malloc((MAX_PORT_NUM)*sizeof(miniport_t));
+  if (miniport_array == NULL) {
+    return;
+  }
   for (i = 0; i < MAX_PORT_NUM; i++) {
-    miniport_array[i] = 0;
+    miniport_array[i] = NULL;
   }
   
   bound_ports_lock = semaphore_create();
@@ -84,18 +85,19 @@ minimsg_initialize() {
  * port to be queued up. If the destination port
  * is not initialized, the packet is thrown away.
  */
-void process_packets(){
+void process_packets() {
   interrupt_level_t l;
   network_interrupt_arg_t* pkt;
   char protocol;
-  network_address_t source_address;
-  unsigned short source_port;
-  network_address_t destination_address;
-  unsigned short destination_port;
+  network_address_t src_addr;
+  unsigned short src_port_num;
+  network_address_t dst_addr;
+  unsigned short dst_port_num;
   //char message_type;
   //unsigned int seq_number;
   //unsigned int ack_number; // TCP
   char* buff;
+  miniport_t dst_port;
 
   while (1) {
     semaphore_P(pkt_available_sem);
@@ -113,37 +115,52 @@ void process_packets(){
           protocol != PROTOCOL_MINISTREAM){
       free(pkt);
       continue;
-    } else {
+    } 
+    else {
       //JUMP ON IT
       buff = (char*)(&pkt->buffer);
+      /* rewrite the unpacked data so that it may be accessed later */
+      *buff = protocol;
       buff++;
-      unpack_address(buff, source_address);
+      unpack_address(buff, src_addr);
+      *((long*)buff) = *((long*)src_addr);
       buff += 8;
-      source_port = unpack_unsigned_short(buff);
+      src_port_num = unpack_unsigned_short(buff);
+      *((unsigned short*)buff) = *((unsigned short*)src_addr);
       buff += 2;
-      unpack_address(buff, destination_address);
+      unpack_address(buff, dst_addr);
+      *((long*)buff) = *((long*)src_addr);
       buff += 8;
-      destination_port = unpack_unsigned_short(buff);
+      dst_port_num = unpack_unsigned_short(buff);
+      *((unsigned short*)buff) = *((unsigned short*)src_addr);
       buff += 2;
+
       if (protocol == PROTOCOL_MINIDATAGRAM){
         //check address
-        if (!network_compare_network_addresses(my_addr, destination_address) ||
-              source_port >= BOUND_PORT_START ||
-              destination_port >= BOUND_PORT_START ){
+        if (!network_compare_network_addresses(my_addr, dst_addr) ||
+              src_port_num >= BOUND_PORT_START ||
+              dst_port_num >= BOUND_PORT_START ) {
           free(pkt);
           continue;
         }
-        //overwrite buffer
-        //if port DNE, fail
-        //enqueue network_interrupt_arg_t to appropriate port queue
-        //continue
+        //if port DNE or not an unbound port, fail
+        if (miniport_array[dst_port_num] == NULL ||
+            miniport_array[dst_port_num]->p_type != UNBOUND_PORT ) {
+          free(pkt);
+          continue;
+        }
+        dst_port = miniport_array[dst_port_num]; 
+        semaphore_P(dst_port->m_port.miniport_unbound.q_lock);
+        queue_append(dst_port->m_port.miniport_unbound.port_pkt_q,pkt);
+        semaphore_V(dst_port->m_port.miniport_unbound.q_lock);
+        semaphore_V(dst_port->m_port.miniport_unbound.port_pkt_available_sem);
+        continue;
       }
       else if (protocol == PROTOCOL_MINISTREAM){
         free(pkt);
         continue; //for now, ignore tcp packets
       }
     }
-    
     //DROP DA BASE
     //JUUUUUMPP ONNNN ITTT
   }
@@ -158,9 +175,44 @@ void process_packets(){
  * outside this range, it is considered an error.
  */
 miniport_t
-miniport_create_unbound(int port_number)
-{
-    return 0;
+miniport_create_unbound(int port_number) {
+  miniport_t new_port;
+
+  if (port_number < 0 || port_number >= BOUND_PORT_START) {
+    // user error
+    return NULL;
+  }
+  if (miniport_array[port_number]) {
+    return miniport_array[port_number];
+  }
+  semaphore_P(unbound_ports_lock);
+  new_port = (miniport_t)malloc(sizeof(struct miniport)); 
+  if (new_port == NULL) {
+    return NULL;
+  }
+  new_port->p_type = UNBOUND_PORT;
+  new_port->m_port.miniport_unbound.port_pkt_q = queue_new();
+  if (!new_port->m_port.miniport_unbound.port_pkt_q) {
+    free(new_port);
+    return NULL;
+  }
+  new_port->m_port.miniport_unbound.port_pkt_available_sem = semaphore_create();
+  if (!new_port->m_port.miniport_unbound.port_pkt_available_sem) {
+    queue_free(new_port->m_port.miniport_unbound.port_pkt_q);
+    free(new_port);
+    return NULL;
+  } 
+  new_port->m_port.miniport_unbound.q_lock = semaphore_create();
+  if (!new_port->m_port.miniport_unbound.q_lock) {
+    queue_free(new_port->m_port.miniport_unbound.port_pkt_q);
+    semaphore_destroy(new_port->m_port.miniport_unbound.port_pkt_available_sem);
+    free(new_port);
+    return NULL;
+  }
+  semaphore_initialize(new_port->m_port.miniport_unbound.port_pkt_available_sem,0);
+  semaphore_initialize(new_port->m_port.miniport_unbound.q_lock,1);
+  return new_port;
+   
 }
 
 /* Creates a bound port for use in sending packets. The two parameters, addr and
