@@ -32,7 +32,6 @@ semaphore_t id_lock = NULL;
 int runnable_count = 0;
 minithread_t current_thread = NULL;
 multilevel_queue_t runnable_q = NULL;
-semaphore_t runnable_q_lock = NULL;
 queue_t blocked_q = NULL;
 semaphore_t blocked_q_lock = NULL;
 queue_t dead_q = NULL;
@@ -130,14 +129,15 @@ minithread_exit(minithread_t completed) {
  
 minithread_t
 minithread_fork(proc_t proc, arg_t arg) {
+  interrupt_level_t l;
   minithread_t new_thread = minithread_create(proc,arg);
   
-  semaphore_P(runnable_q_lock);  
+  l = set_interrupt_level(DISABLED);
   if(multilevel_queue_enqueue(runnable_q,
       new_thread->priority,new_thread) == 0) {
     runnable_count++; //add to queue
   }
-  semaphore_V(runnable_q_lock);
+  set_interrupt_level(l);
   return new_thread;
 }
 
@@ -183,16 +183,18 @@ minithread_stop() {
 
 void
 minithread_start(minithread_t t) {
+  interrupt_level_t l;
+
   t->status = RUNNABLE;
   t->priority = 0;
   t->rem_quanta = 1;
   
-  semaphore_P(runnable_q_lock);
+  l = set_interrupt_level(DISABLED);
   if (multilevel_queue_enqueue(runnable_q,
       t->priority,t) == 0) {
     runnable_count++;
   }
-  semaphore_V(runnable_q_lock);
+  set_interrupt_level(l);
 }
 
 /**
@@ -222,31 +224,35 @@ minithread_dequeue_and_run(queue_t q) {
 
 void
 minithread_demote_priority() {
+  interrupt_level_t l;
+
   if (current_thread->priority == LOWEST_PRIORITY);
   else current_thread->priority++;
   current_thread->rem_quanta = 1 << current_thread->priority;
-  semaphore_P(runnable_q_lock);
+
+  l = set_interrupt_level(DISABLED);
   if (multilevel_queue_enqueue(runnable_q,
       current_thread->priority,current_thread) == 0) {
     runnable_count++;
   }
-  semaphore_V(runnable_q_lock);
- 
+  set_interrupt_level(l);
   scheduler();
 }
 
 void
 minithread_yield() {
+  interrupt_level_t l;  
+
   //put current thread at end of runnable
-  semaphore_P(runnable_q_lock);
   current_thread->priority = 0;
   current_thread->rem_quanta = 1;
 
+  l = set_interrupt_level(DISABLED);
   if (multilevel_queue_enqueue(runnable_q,
       current_thread->priority,current_thread) == 0) {
     runnable_count++;
   }
-  semaphore_V(runnable_q_lock);
+  set_interrupt_level(l);
   //call scheduler here
   scheduler();
 }
@@ -330,8 +336,6 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   semaphore_initialize(dead_q_lock,1);
   dead_sem = semaphore_create();
   semaphore_initialize(dead_sem,0);    
-  runnable_q_lock = semaphore_create();
-  semaphore_initialize(runnable_q_lock,1);
   clean_up_thread = minithread_create(clean_up, NULL);
   multilevel_queue_enqueue(runnable_q,
     clean_up_thread->priority,clean_up_thread);
