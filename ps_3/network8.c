@@ -1,10 +1,78 @@
-/**
- * Make sure creating unbound port with port number already existing returns existing port.
- * Make sure that creating more than max num bound ports will return null (failure).
- * */
+/* network test program 8
+ * tests port creation functions.
+  tests overflow in unbound ports and bound ports when calling
+  create_unbound and create_bound.
+  Unbound ports: "overflow" of unbound ports should just return
+  port was assigned to a number gets returned
+  Bound ports: "overflow" of unbound ports should result in 
+  null return, since a port could not be found
+*/
 
-int main (void) {
-  return 0;
+#include "minithread.h"
+#include "minimsg.h"
+#include "synch.h"
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <assert.h>
+#include <limits.h>
+
+
+#define BUFFER_SIZE 256
+
+
+miniport_t listen_port;
+miniport_t send_port;
+static network_address_t broadcast_addr = {0};
+
+
+int
+thread(int* arg) {
+    int i;
+    for (i = 0; i < 100; i++){
+      //try 100 random unbound port numbers less than 0
+      listen_port = miniport_create_unbound(i-(rand()% INT_MAX/2));
+      assert(listen_port == NULL);
+    }
+    for (i = 0; i < 100; i++){
+      //try 100 random unbound port numbers greater than allowed
+      //limit of MAX_PORT_NUM/2
+      listen_port = miniport_create_unbound(MAX_PORT_NUM/2 + (rand() % MAX_PORT_NUM));
+      assert(listen_port == NULL);
+    }
+
+    printf("Passed unbound port error case assignments.\n");
+
+    for (i = 0; i < MAX_PORT_NUM/2; i++){
+      //fill up port array with bound & unbound ports
+      listen_port = miniport_create_unbound(i);
+      send_port = miniport_create_bound(broadcast_addr, i);
+      assert(listen_port != NULL);
+      assert(send_port != NULL);
+    }
+    printf("Passed unbound/bound port assignments.\n");
+
+    for (i = 0; i < MAX_PORT_NUM/2; i++){
+      //try adding more ports to filled up array
+      //unbound should succeed (return port alredy assigned)
+      //but bound should fail (return null)
+      listen_port = miniport_create_unbound(rand() % MAX_PORT_NUM/2);
+      send_port = miniport_create_bound(broadcast_addr, i);
+      assert(listen_port != NULL);
+      assert(send_port == NULL);
+      listen_port = NULL;
+      send_port = NULL;
+    }
+    printf("Passed unbound/bound port overlow assignments.\n");
+
+    return 0;
 }
+
+int
+main(int argc, char** argv) {
+    minithread_system_initialize(thread, NULL);
+    return -1;
+}
+
 
