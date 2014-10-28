@@ -33,12 +33,12 @@ int current_id = 0; // the next thread id to be assigned
 semaphore_t id_lock = NULL;
 int runnable_count = 0;
 minithread_t current_thread = NULL;
-multilevel_queue_t runnable_q = NULL;
+multilevel_queue_t runnable_q = NULL; // always protected by disabling interrupts
 queue_t blocked_q = NULL;
 semaphore_t blocked_q_lock = NULL;
 queue_t dead_q = NULL;
 semaphore_t dead_q_lock = NULL;
-semaphore_t dead_sem = NULL;
+semaphore_t dead_ready_sem = NULL;
 int sys_time = 0;
 const int TIME_QUANTA = 100 * MILLISECOND;
 
@@ -69,7 +69,7 @@ int choose_priority_level() {
 int clean_up(){
   minithread_t dead = NULL;
   while (1){
-    semaphore_P(dead_sem);
+    semaphore_P(dead_ready_sem);
     semaphore_P(dead_q_lock);
     if (queue_dequeue(dead_q, (void**)(&dead)) == -1){
       semaphore_V(dead_q_lock);
@@ -125,7 +125,7 @@ minithread_exit(minithread_t completed) {
   semaphore_P(dead_q_lock);
   queue_append(dead_q, current_thread);
   semaphore_V(dead_q_lock);
-  semaphore_V(dead_sem);
+  semaphore_V(dead_ready_sem);
   scheduler();
   while(1);
   return 0;
@@ -136,8 +136,12 @@ minithread_fork(proc_t proc, arg_t arg) {
   interrupt_level_t l;
   minithread_t new_thread = minithread_create(proc,arg);
   
+  if (new_thread == NULL) {
+    return NULL;
+  }
+
   l = set_interrupt_level(DISABLED);
-  if(multilevel_queue_enqueue(runnable_q,
+  if (multilevel_queue_enqueue(runnable_q,
       new_thread->priority,new_thread) == 0) {
     runnable_count++; //add to queue
   }
@@ -219,9 +223,8 @@ minithread_enqueue_and_schedule(queue_t q) {
 void
 minithread_dequeue_and_run(queue_t q) {
   minithread_t blocked_thread = NULL;
-  queue_dequeue(q, (void**)(&blocked_thread) );
-  if (blocked_thread->status != BLOCKED) {
-    printf("thread %d should have status BLOCKED\n", minithread_id());
+  if (queue_dequeue(q, (void**)(&blocked_thread)) == -1) {
+    return;
   }
   minithread_start(blocked_thread);
 }
@@ -361,8 +364,8 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   dead_q = queue_new();
   dead_q_lock = semaphore_create();
   semaphore_initialize(dead_q_lock,1);
-  dead_sem = semaphore_create();
-  semaphore_initialize(dead_sem,0);    
+  dead_ready_sem = semaphore_create();
+  semaphore_initialize(dead_ready_sem,0);    
   clean_up_thread = minithread_create(clean_up, NULL);
   multilevel_queue_enqueue(runnable_q,
     clean_up_thread->priority,clean_up_thread);
