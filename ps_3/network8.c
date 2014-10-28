@@ -65,7 +65,7 @@ thread(int* arg) {
       listen_port = NULL;
       send_port = NULL;
     }
-    printf("Passed unbound/bound port overlow assignments.\n");
+    printf("Passed unbound/bound port overflow assignments.\n");
 
     return 0;
 }
