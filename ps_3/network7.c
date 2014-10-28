@@ -2,6 +2,7 @@
  * network7.c
  * Have multiple threads listen on the same port
  * and check that they recieve packets in the same order as requested.
+ * Expected result is that receiveA gets 1st pkt, then receiveB, then receiveC.
  * Also, check that if a thread doesn't receive, it blocks as expected.
  * Furthermore, checks that create_unbound returns the existing port if exists.
  *
