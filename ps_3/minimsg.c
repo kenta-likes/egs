@@ -15,14 +15,14 @@ enum port_type { UNBOUND_PORT = 1, BOUND_PORT};
 union port_union{
   struct unbound
   {
-    queue_t port_pkt_q;//queue for packets
-    semaphore_t port_pkt_available_sem;//counting semaphore for thread blocking
-    semaphore_t q_lock;//binary semaphore for mutual exclusion
+    queue_t port_pkt_q; //queue for packets
+    semaphore_t port_pkt_available_sem; //counting semaphore for thread blocking
+    semaphore_t q_lock; //binary semaphore for mutual exclusion
   } unbound;
   struct bound
   {
-    unsigned short dest_num;//the remote unbound port number this sends to
-    network_address_t dest_addr;//the remote address
+    unsigned short dest_num; //the remote unbound port number this sends to
+    network_address_t dest_addr; //the remote address
   } bound;
 };
 
@@ -233,6 +233,7 @@ miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
   unsigned short start;
   miniport_t new_port;
 
+  semaphore_P(bound_ports_lock);
   start = curr_bound_index;
   while (miniport_array[curr_bound_index] != NULL){
     curr_bound_index += 1;
@@ -240,10 +241,11 @@ miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
       curr_bound_index = BOUND_PORT_START;
     }
     if (curr_bound_index == start){ //bound port array full
+      semaphore_V(bound_ports_lock);
       return NULL;
     }
   }
-  semaphore_P(bound_ports_lock);
+
   new_port = (miniport_t)malloc(sizeof(struct miniport)); 
   if (new_port == NULL) {
     semaphore_V(bound_ports_lock);
@@ -322,7 +324,6 @@ minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg
       miniport_array[local_bound_port->p_num] != local_bound_port) {
     return -1;
   }
-
 
   network_address_copy(local_bound_port->u.bound.dest_addr, dst_addr); 
   hdr.protocol = PROTOCOL_MINIDATAGRAM;
