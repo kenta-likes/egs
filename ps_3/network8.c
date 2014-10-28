@@ -72,6 +72,9 @@ thread(int* arg) {
 
 int
 main(int argc, char** argv) {
+    short fromport;
+    fromport = atoi(argv[1]);
+    network_udp_ports(fromport, fromport);
     minithread_system_initialize(thread, NULL);
     return -1;
 }
