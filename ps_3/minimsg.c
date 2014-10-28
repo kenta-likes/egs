@@ -70,7 +70,7 @@ minimsg_initialize() {
   for (i = 0; i < MAX_PORT_NUM; i++) {
     miniport_array[i] = NULL;
   }
-  
+ /* 
   bound_ports_lock = semaphore_create();
   semaphore_initialize(bound_ports_lock,1);
   unbound_ports_lock = semaphore_create();
@@ -78,7 +78,7 @@ minimsg_initialize() {
   
   pkt_q = queue_new();
   pkt_available_sem = semaphore_create();
-  semaphore_initialize(pkt_available_sem,0);  
+  semaphore_initialize(pkt_available_sem,0); */ 
 }
 
 
@@ -88,14 +88,17 @@ minimsg_initialize() {
  * sanity checks forward them to the appropriate
  * port to be queued up. If the destination port
  * is not initialized, the packet is thrown away.
+ *
+ * We protect important global data structures (ie.
+ * our array of miniports) with semaphores. Each 
+ * miniport has an associated semaphore as well.
  */
 int process_packets() {
   interrupt_level_t l;
   network_interrupt_arg_t* pkt;
   char protocol;
   network_address_t src_addr;
-  
-  struct mini_header header; 
+  mini_header_t header; 
   unsigned short src_port_num;
   network_address_t dst_addr;
   unsigned short dst_port_num;
@@ -106,6 +109,7 @@ int process_packets() {
 
   while (1) {
     semaphore_P(pkt_available_sem);
+    printf("in process packets!!!!\n");
     l = set_interrupt_level(DISABLED);
     if (queue_dequeue(pkt_q, (void**)&pkt)){
       //dequeue fails
@@ -123,11 +127,11 @@ int process_packets() {
     } 
     else {
       // JUMP ON IT
-      header = *((mini_header_t)(&pkt->buffer));
-      unpack_address(header.source_address, src_addr);
-      src_port_num = unpack_unsigned_short(header.source_port);
-      unpack_address(header.destination_address, dst_addr);
-      dst_port_num = unpack_unsigned_short(header.destination_port);
+      header = (mini_header_t)(&pkt->buffer);
+      unpack_address(header->source_address, src_addr);
+      src_port_num = unpack_unsigned_short(header->source_port);
+      unpack_address(header->destination_address, dst_addr);
+      dst_port_num = unpack_unsigned_short(header->destination_port);
 
       if (protocol == PROTOCOL_MINIDATAGRAM){
         //check address

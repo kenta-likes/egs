@@ -14,6 +14,10 @@ network3
 network4
 network5
 network6
+network7
+network8
+network9
+network10
 buffer
 sieve
 .depend
@@ -42,13 +46,16 @@ test_alarm.o
 test_sleep.o
 test_scheduler.o
 shop_preemp.o
+miniheader.o
+minimsg.o
+network.o
 network1.o
 network2.o
 network3.o
 network4.o
 network5.o
 network6.o
-miniheader.o
-minimsg.o
-network.o
->>>>>>> 5cc15f8ef03c489c2aa791105c2f787660113b5b
+network7.o
+network8.o
+network9.o
+network10.o

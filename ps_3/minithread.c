@@ -351,9 +351,9 @@ void
 minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   minithread_t clean_up_thread = NULL;
   minithread_t process_packets_thread = NULL;
-  int a = 0;
+  int dummy = 0;
   void* dummy_ptr = NULL;
-  dummy_ptr = (void*)&a;
+  dummy_ptr = (void*)&dummy;
   current_id = 0; // the next thread id to be assigned
   id_lock = semaphore_create();
   semaphore_initialize(id_lock,1); 
