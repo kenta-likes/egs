@@ -57,6 +57,7 @@ thread(int* arg) {
       //try adding more ports to filled up array
       //unbound should succeed (return port alredy assigned)
       //but bound should fail (return null)
+      //note: runtime is slow for this last loop
       listen_port = miniport_create_unbound(rand() % MAX_PORT_NUM/2);
       send_port = miniport_create_bound(broadcast_addr, i);
       assert(listen_port != NULL);
