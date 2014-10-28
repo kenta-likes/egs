@@ -70,7 +70,7 @@ minimsg_initialize() {
   for (i = 0; i < MAX_PORT_NUM; i++) {
     miniport_array[i] = NULL;
   }
-  
+ /* 
   bound_ports_lock = semaphore_create();
   semaphore_initialize(bound_ports_lock,1);
   unbound_ports_lock = semaphore_create();
@@ -78,7 +78,7 @@ minimsg_initialize() {
   
   pkt_q = queue_new();
   pkt_available_sem = semaphore_create();
-  semaphore_initialize(pkt_available_sem,0);  
+  semaphore_initialize(pkt_available_sem,0); */ 
 }
 
 
@@ -106,6 +106,7 @@ int process_packets() {
 
   while (1) {
     semaphore_P(pkt_available_sem);
+    printf("in process packets!!!!\n");
     l = set_interrupt_level(DISABLED);
     if (queue_dequeue(pkt_q, (void**)&pkt)){
       //dequeue fails

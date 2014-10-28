@@ -219,9 +219,8 @@ minithread_enqueue_and_schedule(queue_t q) {
 void
 minithread_dequeue_and_run(queue_t q) {
   minithread_t blocked_thread = NULL;
-  queue_dequeue(q, (void**)(&blocked_thread) );
-  if (blocked_thread->status != BLOCKED) {
-    printf("thread %d should have status BLOCKED\n", minithread_id());
+  if (queue_dequeue(q, (void**)(&blocked_thread)) == -1) {
+    return;
   }
   minithread_start(blocked_thread);
 }
@@ -348,9 +347,9 @@ void
 minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   minithread_t clean_up_thread = NULL;
   minithread_t process_packets_thread = NULL;
-  int a = 0;
+  int dummy = 0;
   void* dummy_ptr = NULL;
-  dummy_ptr = (void*)&a;
+  dummy_ptr = (void*)&dummy;
   current_id = 0; // the next thread id to be assigned
   id_lock = semaphore_create();
   semaphore_initialize(id_lock,1); 
