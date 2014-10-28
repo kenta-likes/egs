@@ -30,6 +30,7 @@ static network_address_t broadcast_addr = {0};
 int
 thread(int* arg) {
     int i;
+    //first try to assign invalid ports to unbound port
     for (i = 0; i < 100; i++){
       //try 100 random unbound port numbers less than 0
       listen_port = miniport_create_unbound(i-(rand()% INT_MAX/2));
@@ -44,8 +45,8 @@ thread(int* arg) {
 
     printf("Passed unbound port error case assignments.\n");
 
+    //fill up all unbound/bound ports
     for (i = 0; i < MAX_PORT_NUM/2; i++){
-      //fill up port array with bound & unbound ports
       listen_port = miniport_create_unbound(i);
       send_port = miniport_create_bound(broadcast_addr, i);
       assert(listen_port != NULL);
@@ -53,11 +54,15 @@ thread(int* arg) {
     }
     printf("Passed unbound/bound port assignments.\n");
 
+    /*
+     *try adding more ports to already full miniport array
+     *unbound should succeed (return port alredy assigned)
+     *but bound should fail (return null)
+     *note: runtime is slow for this loop because
+     *unbound port linearly checks an array for
+     *unused slots.
+    */
     for (i = 0; i < MAX_PORT_NUM/2; i++){
-      //try adding more ports to filled up array
-      //unbound should succeed (return port alredy assigned)
-      //but bound should fail (return null)
-      //note: runtime is slow for this last loop
       listen_port = miniport_create_unbound(rand() % MAX_PORT_NUM/2);
       send_port = miniport_create_bound(broadcast_addr, i);
       assert(listen_port != NULL);
