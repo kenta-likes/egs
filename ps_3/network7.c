@@ -1,6 +1,10 @@
 /**
+ * network7.c
  * Have multiple threads listen on the same port
  * and check that they recieve packets in the same order as requested.
+ * Also, check that if a thread doesn't receive, it blocks as expected.
+ * Furthermore, checks that create_unbound returns the existing port if exists.
+ *
  * */
 
 #include "minithread.h"
@@ -26,6 +30,7 @@ receiveD(int* arg) {
 
   minithread_yield();
   port = miniport_create_unbound(1);
+  length = BUFFER_SIZE;
   minimsg_receive(port, &from, buffer, &length);
   printf("Hello from recieveD.\n");
   return 0;
@@ -42,6 +47,7 @@ receiveC(int* arg) {
 
   minithread_fork(receiveD, NULL);
   minithread_yield();
+  length = BUFFER_SIZE;
   minimsg_receive(port, &from, buffer, &length);
   
   printf("receiveC got %s.\n", buffer);
@@ -59,8 +65,8 @@ receiveB(int* arg) {
 
   minithread_fork(receiveC, NULL);
   minithread_yield();
+  length = BUFFER_SIZE;
   minimsg_receive(port, &from, buffer, &length);
-
   printf("receiveB got %s.\n", buffer);
   return 0;
 }
@@ -76,6 +82,7 @@ receiveA(int* arg) {
 
   minithread_fork(receiveB, NULL);
   minithread_yield();
+  length = BUFFER_SIZE;
   minimsg_receive(port, &from, buffer, &length);
   printf("receiveA got %s.\n", buffer);
   return 0;
