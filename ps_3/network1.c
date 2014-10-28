@@ -50,6 +50,7 @@ main(int argc, char** argv) {
     fromport = atoi(argv[1]);
     network_udp_ports(fromport,fromport); 
     textlen = strlen(text) + 1;
+    printf("starting system\n");
     minithread_system_initialize(thread, NULL);
     return -1;
 }
