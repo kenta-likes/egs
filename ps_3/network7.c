@@ -33,6 +33,7 @@ receiveD(int* arg) {
   length = BUFFER_SIZE;
   minimsg_receive(port, &from, buffer, &length);
   printf("Hello from recieveD.\n");
+  miniport_destroy(from);
   return 0;
  }
 
@@ -51,6 +52,7 @@ receiveC(int* arg) {
   minimsg_receive(port, &from, buffer, &length);
   
   printf("receiveC got %s.\n", buffer);
+  miniport_destroy(from);
   return 0;
 }
 
@@ -68,6 +70,7 @@ receiveB(int* arg) {
   length = BUFFER_SIZE;
   minimsg_receive(port, &from, buffer, &length);
   printf("receiveB got %s.\n", buffer);
+  miniport_destroy(from);
   return 0;
 }
 
@@ -85,6 +88,7 @@ receiveA(int* arg) {
   length = BUFFER_SIZE;
   minimsg_receive(port, &from, buffer, &length);
   printf("receiveA got %s.\n", buffer);
+  miniport_destroy(from);
   return 0;
 }
 
