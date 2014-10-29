@@ -6,7 +6,6 @@
 #include "miniheader.h"
 #include <stdlib.h>
 
-#define MAX_PORT_NUM 65536
 #define UNBOUND_PORT_START 0 
 #define BOUND_PORT_START 32768
 
