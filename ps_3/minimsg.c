@@ -232,6 +232,7 @@ miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
   unsigned short start;
   miniport_t new_port;
 
+  semaphore_P(bound_ports_lock);
   start = curr_bound_index;
   while (miniport_array[curr_bound_index] != NULL){
     curr_bound_index += 1;
@@ -239,10 +240,10 @@ miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
       curr_bound_index = BOUND_PORT_START;
     }
     if (curr_bound_index == start){ //bound port array full
+      semaphore_V(bound_ports_lock);
       return NULL;
     }
   }
-  semaphore_P(bound_ports_lock);
   new_port = (miniport_t)malloc(sizeof(struct miniport)); 
   if (new_port == NULL) {
     semaphore_V(bound_ports_lock);
