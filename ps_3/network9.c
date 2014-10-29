@@ -1,5 +1,6 @@
 /**
- * Send and receive a lot of packets and check whether system handles.
+ * Send and receive a lot of packets and check whether system handles
+ * without dropping, running out of memory or crashing.
  * */
 
 #include "defs.h"
@@ -12,7 +13,7 @@
 #include <string.h>
 
 #define BUFFER_SIZE 256
-#define MAX_COUNT 5000
+#define MAX_COUNT 10000
 
 miniport_t port;
 

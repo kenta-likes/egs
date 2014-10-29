@@ -10,7 +10,7 @@ default: all
 #    necessary PortOS code.
 #
 # this would be a good place to add your tests
-all: multilevel_queue_test test_alarm test_scheduler queue_test test1 test2 test3 buffer sieve shop shop_preemp network1 network2 network3 network4 network5 network6 network7 network8 network9 network10
+all: multilevel_queue_test test_alarm test_scheduler queue_test test1 test2 test3 buffer sieve shop shop_preemp network1 network2 network3 network4 network5 network6 network7 network8 network9
 
 # running "make clean" will remove all files ignored by git.  To ignore more
 # files, you should add them to the file .gitignore
