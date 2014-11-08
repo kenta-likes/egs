@@ -1,8 +1,0 @@
-README for P3:
-
-Ben Wang (bhw44)
-Kenta Labur (kl459)
-
-Known issues:
-- When we have many bound ports, it takes a long time to create a new bound port because we do a linear scan on an array to find a spot for the new bound port
-- We drop some packets after the number of consecutive sends reaches the order of 100s and 1000s. This is alleviated however by adding sleep statements of 10 milliseconds between sends.

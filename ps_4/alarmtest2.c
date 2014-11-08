@@ -33,7 +33,6 @@ int sleeper(int* number) {
 }
 
 int startup(int* arg) {
-  minithread_t thread;
   int i;
 
   srand(SEED);
@@ -42,7 +41,7 @@ int startup(int* arg) {
     thread_numbers[i] = i+1;
 
   for (i=0; i<N_THREADS-1; i++)
-    thread = minithread_fork(sleeper, &(thread_numbers[i]));
+    minithread_fork(sleeper, &(thread_numbers[i]));
 
   sleeper(&(thread_numbers[N_THREADS-1]));
 

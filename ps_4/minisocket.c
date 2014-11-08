@@ -2,6 +2,8 @@
  *	Implementation of minisockets.
  */
 #include "minisocket.h"
+#include <stdlib.h>
+#include <stdio.h>
 
 struct minisocket
 {
@@ -28,7 +30,7 @@ void minisocket_initialize()
  */
 minisocket_t minisocket_server_create(int port, minisocket_error *error)
 {
-
+  return NULL;
 }
 
 
@@ -48,7 +50,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
  */
 minisocket_t minisocket_client_create(network_address_t addr, int port, minisocket_error *error)
 {
-
+  return NULL;
 }
 
 
@@ -73,7 +75,7 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
  */
 int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_error *error)
 {
-
+  return -1;
 }
 
 /*
@@ -88,7 +90,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
  */
 int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisocket_error *error)
 {
-
+  return -1;
 }
 
 /* Close a connection. If minisocket_close is issued, any send or receive should
