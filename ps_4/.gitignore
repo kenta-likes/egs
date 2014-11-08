@@ -58,6 +58,7 @@ test_scheduler.o
 shop_preemp.o
 miniheader.o
 minimsg.o
+minisocket.o
 network.o
 network1.o
 network2.o
