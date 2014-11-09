@@ -7,11 +7,17 @@
 #include "synch.h"
 #include "queue.h"
 #include "alarm.h"
+#include "network.h"
 
 #define NUM_SOCKETS 65536
+#define SERVER_START 0
 #define CLIENT_START 32768
+
+typedef enum state { LISTEN = 1, CONNECTED, WAIT, EXIT} state;
+
 struct minisocket
 {
+  state curr_state;
   int try_count;
   int curr_ack;
   int curr_seq;
@@ -19,12 +25,15 @@ struct minisocket
   semaphore_t ack_rcv;
   semaphore_t pkt_ready; 
   queue_t pkt_q;
-  int dest_port;
+  int src_port;
+  network_address_t dst_addr;
+  int dst_port;
 };
 
 minisocket_t* sock_array;
 semaphore_t client_lock;
 semaphore_t server_lock;
+network_address_t src_addr;
 
 /* Initializes the minisocket layer. */
 void minisocket_initialize()
@@ -46,6 +55,7 @@ void minisocket_initialize()
   }
   semaphore_initialize(client_lock, 1);
   semaphore_initialize(server_lock, 1);
+  network_get_my_address(src_addr);
 }
 
 
