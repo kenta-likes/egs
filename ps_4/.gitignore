@@ -27,6 +27,8 @@ buffer
 sieve
 .depend
 
+
+minisocket.o
 buffer.o
 end.o
 interrupts.o
@@ -58,7 +60,6 @@ test_scheduler.o
 shop_preemp.o
 miniheader.o
 minimsg.o
-minisocket.o
 network.o
 network1.o
 network2.o

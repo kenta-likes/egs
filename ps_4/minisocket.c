@@ -4,18 +4,50 @@
 #include "minisocket.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include "synch.h"
+#include "queue.h"
+#include "alarm.h"
 
+#define NUM_SOCKETS 65536
+#define CLIENT_START 32768
 struct minisocket
 {
-  int dummy; /* delete this field */
-  /* put your definition of minisockets here */
+  int try_count;
+  int curr_ack;
+  int curr_seq;
+  alarm_t resend_alarm; 
+  semaphore_t ack_rcv;
+  semaphore_t pkt_ready; 
+  queue_t pkt_q;
+  int dest_port;
 };
+
+minisocket_t* sock_array;
+semaphore_t client_lock;
+semaphore_t server_lock;
 
 /* Initializes the minisocket layer. */
 void minisocket_initialize()
 {
-
+  sock_array = (minisocket_t*)malloc(sizeof(struct minisocket)*NUM_SOCKETS);
+  if (!sock_array) {
+    return;
+  }
+  client_lock = semaphore_create();
+  if (!client_lock) {
+    free(sock_array);
+    return;
+  }
+  server_lock = semaphore_create();
+  if (!server_lock) {
+    free(sock_array);
+    semaphore_destroy(client_lock);
+    return;
+  }
+  semaphore_initialize(client_lock, 1);
+  semaphore_initialize(server_lock, 1);
 }
+
 
 /* 
  * Listen for a connection from somebody else. When communication link is
