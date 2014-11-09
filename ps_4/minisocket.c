@@ -7,7 +7,6 @@
 #include "synch.h"
 #include "queue.h"
 #include "alarm.h"
-#include "network.h"
 
 #define NUM_SOCKETS 65536
 #define SERVER_START 0
@@ -22,8 +21,7 @@ struct minisocket
   int curr_ack;
   int curr_seq;
   alarm_t resend_alarm; 
-  semaphore_t ack_rcv;
-  semaphore_t pkt_ready; 
+  semaphore_t pkt_ready_sem; 
   queue_t pkt_q;
   int src_port;
   network_address_t dst_addr;
@@ -72,7 +70,55 @@ void minisocket_initialize()
  */
 minisocket_t minisocket_server_create(int port, minisocket_error *error)
 {
-  return NULL;
+  minisocket_t new_sock;
+
+  //check valid portnum
+  if (port < 0 || port >= CLIENT_START){
+    *error = SOCKET_INVALIDPARAMS;
+    return NULL;
+  }
+  //check port in use
+  semaphore_P(server_lock);
+  if (sock_array[port] != NULL){
+    *error = SOCKET_PORTINUSE;
+    return NULL;
+  }
+  new_sock = (minisocket_t)malloc(sizeof(struct minisocket));
+  if (!new_sock){
+    semaphore_V(server_lock);
+    *error = SOCKET_OUTOFMEMORY;
+    return NULL;
+  }
+  new_sock->pkt_ready_sem = semaphore_create();
+  if (!(new_sock->pkt_ready_sem)){
+    semaphore_V(server_lock);
+    free(new_sock);
+    *error = SOCKET_OUTOFMEMORY;
+    return NULL;
+  }
+  new_sock->pkt_q = queue_new();
+  if (!(new_sock->pkt_q)){
+    semaphore_V(server_lock);
+    free(new_sock->pkt_ready_sem);
+    free(new_sock);
+    *error = SOCKET_OUTOFMEMORY;
+    return NULL;
+  }
+  semaphore_initialize(new_sock->pkt_ready_sem, 0);
+
+  new_sock->curr_state = LISTEN;
+  new_sock->try_count = 0;
+  new_sock->curr_ack = 0;
+  new_sock->curr_seq = 1;
+  new_sock->resend_alarm = NULL;//no alarm set
+  new_sock->src_port = port;
+  new_sock->dst_port = -1;//not paired with client
+  network_address_blankify(new_sock->dst_addr);//not paired with client
+
+  sock_array[port] = new_sock;
+
+  semaphore_V(server_lock);
+  return new_sock;
 }
 
 
