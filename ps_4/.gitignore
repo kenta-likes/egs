@@ -28,7 +28,6 @@ sieve
 .depend
 
 
-minisocket.o
 buffer.o
 end.o
 interrupts.o
