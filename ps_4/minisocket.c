@@ -7,31 +7,33 @@
 #include "synch.h"
 #include "queue.h"
 #include "alarm.h"
+#include "miniheader.h"
+#include "interrupts.h"
 
 #define NUM_SOCKETS 65536
 #define SERVER_START 0
 #define CLIENT_START 32768
 
-typedef enum state { LISTEN = 1, CONNECTED, WAIT, EXIT} state;
+typedef enum state { LISTEN = 1, CONNECTING, CONNECTED, WAIT, EXIT} state;
 
 struct minisocket
 {
   state curr_state;
   int try_count;
-  int curr_ack;
-  int curr_seq;
+  unsigned int curr_ack;
+  unsigned int curr_seq;
   alarm_t resend_alarm; 
   semaphore_t pkt_ready_sem; 
   queue_t pkt_q;
-  int src_port;
+  unsigned short src_port;
   network_address_t dst_addr;
-  int dst_port;
+  unsigned short dst_port;
 };
 
 minisocket_t* sock_array;
 semaphore_t client_lock;
 semaphore_t server_lock;
-network_address_t src_addr;
+network_address_t my_addr;
 
 /* Initializes the minisocket layer. */
 void minisocket_initialize()
@@ -53,7 +55,7 @@ void minisocket_initialize()
   }
   semaphore_initialize(client_lock, 1);
   semaphore_initialize(server_lock, 1);
-  network_get_my_address(src_addr);
+  network_get_my_address(my_addr);
 }
 
 
@@ -71,6 +73,16 @@ void minisocket_initialize()
 minisocket_t minisocket_server_create(int port, minisocket_error *error)
 {
   minisocket_t new_sock;
+  interrupt_level_t l;
+  network_interrupt_arg_t * pkt;
+  mini_header_reliable_t pkt_hdr;
+  char protocol;
+  network_address_t src_addr;
+  unsigned short src_port;
+  network_address_t dst_addr;
+  unsigned int seq_num;
+  unsigned int ack_num;
+  
 
   //check valid portnum
   if (port < 0 || port >= CLIENT_START){
@@ -116,8 +128,63 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
   network_address_blankify(new_sock->dst_addr);//not paired with client
 
   sock_array[port] = new_sock;
-
   semaphore_V(server_lock);
+ 
+  while (new_sock->curr_state == LISTEN){
+    semaphore_P(new_sock->pkt_ready_sem);
+    l = set_interrupt_level(DISABLED);
+    if (queue_dequeue(new_sock->pkt_q, (void**)&pkt) == -1){
+      *error = SOCKET_RECEIVEERROR;
+      set_interrupt_level(l);
+      continue;
+    }
+    //check packet size at least sizeof tcp header
+    if (pkt->size < sizeof(struct mini_header_reliable)) {
+      *error = SOCKET_RECEIVEERROR;
+      free(pkt);
+      set_interrupt_level(l);
+      continue;
+    }
+    pkt_hdr = (mini_header_reliable_t)(&pkt->buffer);
+    protocol = pkt_hdr->protocol;
+    if (protocol != PROTOCOL_MINISTREAM){
+      *error = SOCKET_RECEIVEERROR;
+      free(pkt);
+      set_interrupt_level(l);
+      continue;
+    }
+    unpack_address(pkt_hdr->source_address, src_addr);
+    src_port = unpack_unsigned_short(pkt_hdr->source_port);
+    if (src_port < CLIENT_START || src_port >= NUM_SOCKETS){
+      *error = SOCKET_RECEIVEERROR;
+      free(pkt);
+      set_interrupt_level(l);
+      continue;
+    }
+    unpack_address(pkt_hdr->destination_address, dst_addr);
+    if (!network_compare_network_addresses(dst_addr, my_addr)){
+      *error = SOCKET_RECEIVEERROR;
+      free(pkt);
+      set_interrupt_level(l);
+      continue;
+    }
+    //TCP!!!!
+    seq_num = unpack_unsigned_int(pkt_hdr->seq_number);
+    ack_num = unpack_unsigned_int(pkt_hdr->ack_number);
+    if (pkt_hdr->message_type != MSG_SYN || seq_num != 1 || ack_num != 0){
+      *error = SOCKET_RECEIVEERROR;
+      free(pkt);
+      set_interrupt_level(l);
+      continue;
+    }
+    new_sock->curr_state = WAIT;
+    new_sock->curr_ack++;
+    //create SYNACK packet
+
+    set_interrupt_level(l);
+    
+    
+  }
   return new_sock;
 }
 
