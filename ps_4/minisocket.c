@@ -16,7 +16,7 @@
 #define CLIENT_START 32768
 #define RESEND_TIME_UNIT 1
 
-typedef enum state { LISTEN = 1, CONNECTED, WAIT, EXIT} state;
+typedef enum state {LISTEN = 1, CONNECTING, CONNECTED, WAIT, EXIT} state;
 
 struct minisocket
 {
@@ -283,38 +283,36 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
   new_sock->try_count = 0;
   new_sock->curr_ack = 0;
   new_sock->curr_seq = 1;
-  new_sock->resend_alarm = NULL; //no alarm set
+  new_sock->resend_alarm = NULL; // no alarm set
   new_sock->src_port = port;
-  new_sock->dst_port = -1; //not paired with client
-  network_address_blankify(new_sock->dst_addr);//not paired with client
+  new_sock->dst_port = -1; // not paired with client
+  network_address_blankify(new_sock->dst_addr); // not paired with client
 
   sock_array[port] = new_sock;
   semaphore_V(server_lock);
  
-  while (new_sock->curr_state != CONNECTED){
-    semaphore_P(new_sock->pkt_ready_sem);
+  while (new_sock->curr_state != CONNECTED) {
+    // wait for MSG_SYN
+    semaphore_P(new_sock->ack_ready_sem);
     l = set_interrupt_level(DISABLED);
 
-    /*failed 7 times, revert to listen state*/
-    if (new_sock->curr_state == EXIT){
+    /* Sent MSG_SYNACK 7 times w/o response
+     * revert to listen state. 
+     */
+    if (new_sock->curr_state == EXIT) {
       *error = SOCKET_SENDERROR;
+      // clean out the queue
       while (queue_dequeue(new_sock->pkt_q,(void**)&pkt) != -1){
         free(pkt);
       }
-      set_interrupt_level(l);
       new_sock->curr_state = LISTEN;
       new_sock->curr_ack = 0;
       new_sock->curr_seq = 1;
-      continue;
-    }
-    //disable interrupts for dequeing packets
-    if (queue_dequeue(new_sock->pkt_q, (void**)&pkt) == -1){
-      *error = SOCKET_RECEIVEERROR;
       set_interrupt_level(l);
       continue;
     }
-    set_interrupt_level(l);
 
+    /* 
     //check packet size at least sizeof tcp header
     if (pkt->size < sizeof(struct mini_header_reliable)) {
       *error = SOCKET_RECEIVEERROR;
@@ -339,18 +337,9 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
       free(pkt);
       continue;
     }
-    
-    switch (new_sock->curr_state){
-    case LISTEN:
-      if (pkt_hdr->message_type != MSG_SYN || seq_num != 1 || ack_num != 0){
-        *error = SOCKET_RECEIVEERROR;
-        free(pkt);
-        continue;
-      }
-      
-      new_sock->curr_state = WAIT;
-      new_sock->curr_ack++;
-      // send SYNACK
+    */
+    switch (new_sock->curr_state) {
+    case CONNECTING:  
       minisocket_send_ctrl(MSG_SYNACK, new_sock, error);
 
       resend_alarm_arg.sock = new_sock;
@@ -359,16 +348,13 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
       resend_alarm_arg.data = pkt->buffer; //placeholder
       resend_alarm_arg.error = error; 
       new_sock->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
+      
+      new_sock->curr_state = WAIT;
+      set_interrupt_level(l);
       break;
+
     case WAIT:
-      if (pkt_hdr->message_type == MSG_SYN) {
-        minisocket_send_ctrl(MSG_FIN, new_sock, error);
-      }
-      if (pkt_hdr->message_type != MSG_ACK || seq_num != 1 || ack_num != 1){
-        *error = SOCKET_RECEIVEERROR;
-        free(pkt);
-        continue;
-      }
+      // must have gotten a MSG_ACK 
       new_sock->curr_state = CONNECTED;
       new_sock->try_count = 0;
       new_sock->resend_alarm = NULL;
@@ -376,12 +362,9 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
       *error = SOCKET_NOERROR;
       free(pkt);
       break;
+
     default:
-      if (pkt_hdr->message_type == MSG_SYN) {
-        minisocket_send_ctrl(MSG_FIN, new_sock, error);
-      }
       *error = SOCKET_RECEIVEERROR;
-      free(pkt);
       new_sock->curr_state = EXIT;
       break;
     }
