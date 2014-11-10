@@ -16,7 +16,7 @@
 #define CLIENT_START 32768
 #define RESEND_TIME_UNIT 1
 
-typedef enum state {LISTEN = 1, CONNECTING, CONNECT_WAIT, CONNECTED, WAIT, EXIT} state;
+typedef enum state {LISTEN = 1, CONNECTING, CONNECT_WAIT, MSG_WAIT, CLOSE_SEND, CLOSE_RCV, CONNECTED, BREAKUP} state;
 
 struct minisocket
 {
@@ -554,6 +554,16 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
  */
 int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisocket_error *error)
 {
+  semaphore_P(socket->sock_lock);
+  semaphore_P(socket->pkt_ready_sem);
+  switch (socket->curr_state) {
+  case CONNECTED:
+    break;
+
+  default:
+    break;
+  }
+  semaphore_V(socket->sock_lock);
   return -1;
 }
 
