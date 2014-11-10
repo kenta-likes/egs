@@ -13,6 +13,7 @@ test3
 conn-network1
 conn-network2
 conn-network3
+conn-network4
 network1
 network2
 network3
@@ -23,6 +24,7 @@ network7
 network8
 network9
 network10
+network_test_bound
 buffer
 sieve
 .depend
@@ -49,6 +51,7 @@ test3.o
 conn-network1.o
 conn-network2.o
 conn-network3.o
+conn-network4.o
 shop.o
 alarm.o
 alarmtest1.o
@@ -70,3 +73,4 @@ network7.o
 network8.o
 network9.o
 network10.o
+network_test_bound.o
