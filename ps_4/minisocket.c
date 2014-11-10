@@ -9,10 +9,12 @@
 #include "alarm.h"
 #include "miniheader.h"
 #include "interrupts.h"
+#include "minithread.h"
 
 #define NUM_SOCKETS 65536
 #define SERVER_START 0
 #define CLIENT_START 32768
+#define RESEND_TIME_UNIT 1
 
 typedef enum state { LISTEN = 1, CONNECTING, CONNECTED, WAIT, EXIT} state;
 
@@ -30,10 +32,103 @@ struct minisocket
   unsigned short dst_port;
 };
 
+typedef struct {
+  minisocket_t sock;
+  unsigned int data_len;
+  char* data;
+  minisocket_error *error;
+}* resend_arg_t;
+
 minisocket_t* sock_array;
 semaphore_t client_lock;
 semaphore_t server_lock;
 network_address_t my_addr;
+
+/* minisocket_resend takes in a resend_arg with fields on the socket on which the send,
+ * and what to send.
+ * This function will be passed in to an alarm to be called later.
+ * If the alarm is called, we will increment try_count, resend and set another alarm 
+ * unless we have reached 7 tries, in which case we fail.
+ * Note: Interrupts are disabled whenever this function is called,
+ * since it is passed in as an alarm func.
+ */
+void minisocket_resend(void* arg);
+
+/* minisocket_send_ack creates an ack packet of type ack_type and with
+ * fields taken from the sock parameter.
+ * This ack packet is sent over the network.
+ * If there is an underlying network failure, error is updated
+ * but the pkt is not resent.
+ * The address of pkt is given as the data buffer, 
+ * but no data from pkt is written since the data_len is 0.
+ */ 
+void minisocket_send_ack(char ack_type, minisocket_t sock, minisocket_error* error) {
+  struct mini_header_reliable pkt;
+  pkt.protocol = PROTOCOL_MINISTREAM;
+  pack_address(pkt.source_address, my_addr);
+  pack_unsigned_short(pkt.source_port, sock->src_port);
+  pack_address(pkt.destination_address, sock->dst_addr);
+  pack_unsigned_short(pkt.destination_port, sock->dst_port);
+  pkt.message_type = ack_type;
+  pack_unsigned_int(pkt.seq_number, sock->curr_seq);
+  pack_unsigned_int(pkt.ack_number, sock->curr_ack);
+  
+  if (network_send_pkt(sock->dst_addr, sizeof(pkt), 
+      (char*)&pkt, 0, (char*)&pkt) == -1) {
+    *error = SOCKET_SENDERROR;
+  }  
+}
+
+/* minisocket_send_data creates a header pkt with fields taken from sock parameter.
+ * The header and the data payload are sent over the network.
+ * If there is an underlying network failure, error is updated
+ * but the pkt is not resent at this level.
+ * Since this function may be called on a resend, seq_number is not automatically updated. 
+ * It is the responsibility of minisocket_send to update the seq_number.
+ */
+void minisocket_send_data(minisocket_t sock, unsigned int data_len, char* data, minisocket_error* error) {
+  struct mini_header_reliable pkt;
+  pkt.protocol = PROTOCOL_MINISTREAM;
+  pack_address(pkt.source_address, my_addr);
+  pack_unsigned_short(pkt.source_port, sock->src_port);
+  pack_address(pkt.destination_address, sock->dst_addr);
+  pack_unsigned_short(pkt.destination_port, sock->dst_port);
+  pkt.message_type = MSG_ACK;
+  pack_unsigned_int(pkt.seq_number, sock->curr_seq);
+  pack_unsigned_int(pkt.ack_number, sock->curr_ack);
+  
+  if (network_send_pkt(sock->dst_addr, sizeof(pkt), 
+      (char*)&pkt, data_len, data)  == -1) {
+    *error = SOCKET_SENDERROR;
+  }
+}
+
+/* minisocket_resend takes in a resend_arg with fields on the socket on which the send,
+ * and what to send.
+ * This function will be passed in to an alarm to be called later.
+ * If the alarm is called, we will increment try_count, resend and set another alarm 
+ * unless we have reached 7 tries, in which case we fail.
+ * Note: Interrupts are disabled whenever this function is called,
+ * since it is passed in as an alarm func.
+ */
+void minisocket_resend(void* arg) {
+  int wait_cycles;
+  
+  resend_arg_t params = (resend_arg_t)arg;
+  params->sock->try_count++;
+  if (params->sock->try_count >= 7) {
+    free(params->sock->resend_alarm); 
+    params->sock->resend_alarm = NULL;
+    params->sock->curr_state = EXIT;
+    params->sock->try_count = 0;
+    return; 
+  }
+  
+  wait_cycles = (1 << params->sock->try_count) * RESEND_TIME_UNIT;
+  minisocket_send_data(params->sock, params->data_len, params->data, params->error); 
+  set_alarm(wait_cycles, minisocket_resend, arg, minithread_time());
+}
+
 
 /* Initializes the minisocket layer. */
 void minisocket_initialize()
@@ -77,8 +172,6 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
   network_interrupt_arg_t * pkt;
   mini_header_reliable_t pkt_hdr;
   char protocol;
-  network_address_t src_addr;
-  unsigned short src_port;
   network_address_t dst_addr;
   unsigned int seq_num;
   unsigned int ack_num;
@@ -122,9 +215,9 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
   new_sock->try_count = 0;
   new_sock->curr_ack = 0;
   new_sock->curr_seq = 1;
-  new_sock->resend_alarm = NULL;//no alarm set
+  new_sock->resend_alarm = NULL; //no alarm set
   new_sock->src_port = port;
-  new_sock->dst_port = -1;//not paired with client
+  new_sock->dst_port = -1; //not paired with client
   network_address_blankify(new_sock->dst_addr);//not paired with client
 
   sock_array[port] = new_sock;
@@ -153,37 +246,26 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
       set_interrupt_level(l);
       continue;
     }
-    unpack_address(pkt_hdr->source_address, src_addr);
-    src_port = unpack_unsigned_short(pkt_hdr->source_port);
-    if (src_port < CLIENT_START || src_port >= NUM_SOCKETS){
-      *error = SOCKET_RECEIVEERROR;
-      free(pkt);
-      set_interrupt_level(l);
-      continue;
-    }
+    unpack_address(pkt_hdr->source_address, new_sock->dst_addr);
+    new_sock->dst_port = unpack_unsigned_short(pkt_hdr->source_port);
     unpack_address(pkt_hdr->destination_address, dst_addr);
-    if (!network_compare_network_addresses(dst_addr, my_addr)){
-      *error = SOCKET_RECEIVEERROR;
-      free(pkt);
-      set_interrupt_level(l);
-      continue;
-    }
-    //TCP!!!!
     seq_num = unpack_unsigned_int(pkt_hdr->seq_number);
     ack_num = unpack_unsigned_int(pkt_hdr->ack_number);
-    if (pkt_hdr->message_type != MSG_SYN || seq_num != 1 || ack_num != 0){
+    if (new_sock->dst_port < CLIENT_START || new_sock->dst_port >= NUM_SOCKETS
+        || !network_compare_network_addresses(dst_addr, my_addr)
+        || pkt_hdr->message_type != MSG_SYN || seq_num != 1 || ack_num != 0){
       *error = SOCKET_RECEIVEERROR;
       free(pkt);
       set_interrupt_level(l);
       continue;
     }
+    
     new_sock->curr_state = WAIT;
     new_sock->curr_ack++;
-    //create SYNACK packet
+    // create SYNACK packet
+    minisocket_send_ack(MSG_SYNACK, new_sock, error);
 
     set_interrupt_level(l);
-    
-    
   }
   return new_sock;
 }
