@@ -16,3 +16,14 @@ If we receive MSG_FIN in network handler:
 
 Closing connections:
 1. close connection function
+If we receive MSG_SYN OR MSG_SYNACK in network handler:
+  - if state == CONNECT_WAIT:
+    - if MSG_SYNACK:
+      - V(ack_ready_sem)
+    - else:
+      - drop
+  - if state == WAIT:
+    - if MSG_ACK:
+      - V(ack_ready_sem)
+    - else:
+      - drop
