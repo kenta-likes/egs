@@ -26,13 +26,14 @@ struct minisocket
   unsigned int curr_seq;
   alarm_t resend_alarm; 
   semaphore_t pkt_ready_sem; 
+  semaphore_t sock_lock; //all mighty sock lock
   queue_t pkt_q;
   unsigned short src_port;
   network_address_t dst_addr;
   unsigned short dst_port;
 };
 
-typedef struct {
+typedef struct resend_arg {
   minisocket_t sock;
   unsigned int data_len;
   char* data;
@@ -117,16 +118,17 @@ void minisocket_resend(void* arg) {
   resend_arg_t params = (resend_arg_t)arg;
   params->sock->try_count++;
   if (params->sock->try_count >= 7) {
-    free(params->sock->resend_alarm); 
     params->sock->resend_alarm = NULL;
     params->sock->curr_state = EXIT;
     params->sock->try_count = 0;
+    semaphore_V(params->sock->pkt_ready_sem);
     return; 
   }
   
   wait_cycles = (1 << params->sock->try_count) * RESEND_TIME_UNIT;
   minisocket_send_data(params->sock, params->data_len, params->data, params->error); 
-  set_alarm(wait_cycles, minisocket_resend, arg, minithread_time());
+  params->sock->resend_alarm = set_alarm(wait_cycles, minisocket_resend, arg, minithread_time());
+
 }
 
 
@@ -153,6 +155,26 @@ void minisocket_initialize()
   network_get_my_address(my_addr);
 }
 
+void minisocket_destroy(minisocket_t sock, minisocket_error* error){
+  network_interrupt_arg_t* pkt;
+
+  semaphore_P(server_lock);
+  sock_array[sock->src_port] = NULL;
+  semaphore_V(server_lock);
+  *error = SOCKET_SENDERROR;
+  free(sock->pkt_ready_sem);
+  //free all queued packets. interrupts not disabled
+  //because socket in array set to null, network
+  //handler cannot access queue
+  while (queue_dequeue(sock->pkt_q,(void**)&pkt) != -1){
+    free(pkt);
+  }
+  queue_free(sock->pkt_q);
+  semaphore_destroy(sock->pkt_ready_sem);
+  semaphore_destroy(sock->sock_lock);
+  free(sock);
+}
+
 
 /* 
  * Listen for a connection from somebody else. When communication link is
@@ -175,6 +197,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
   network_address_t dst_addr;
   unsigned int seq_num;
   unsigned int ack_num;
+  struct resend_arg resend_alarm_arg;
   
 
   //check valid portnum
@@ -182,8 +205,10 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
     *error = SOCKET_INVALIDPARAMS;
     return NULL;
   }
+
   //check port in use
   semaphore_P(server_lock);
+
   if (sock_array[port] != NULL){
     *error = SOCKET_PORTINUSE;
     return NULL;
@@ -209,7 +234,17 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
     *error = SOCKET_OUTOFMEMORY;
     return NULL;
   }
+  new_sock->sock_lock = semaphore_create();
+  if (!(new_sock->sock_lock)){
+    semaphore_V(server_lock);
+    free(new_sock->pkt_ready_sem);
+    free(new_sock->pkt_q);
+    free(new_sock);
+    *error = SOCKET_OUTOFMEMORY;
+    return NULL;
+  }
   semaphore_initialize(new_sock->pkt_ready_sem, 0);
+  semaphore_initialize(new_sock->sock_lock, 1);
 
   new_sock->curr_state = LISTEN;
   new_sock->try_count = 0;
@@ -223,27 +258,42 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
   sock_array[port] = new_sock;
   semaphore_V(server_lock);
  
-  while (new_sock->curr_state == LISTEN){
+  while (new_sock->curr_state != CONNECTED){
     semaphore_P(new_sock->pkt_ready_sem);
     l = set_interrupt_level(DISABLED);
+
+    /*failed 7 times, revert to listen state*/
+    if (new_sock->curr_state == EXIT){
+      *error = SOCKET_SENDERROR;
+      free(new_sock->pkt_ready_sem);
+      while (queue_dequeue(new_sock->pkt_q,(void**)&pkt) != -1){
+        free(pkt);
+      }
+      set_interrupt_level(l);
+      new_sock->curr_state = LISTEN;
+      new_sock->curr_ack = 0;
+      new_sock->curr_seq = 1;
+      continue;
+    }
+    //disable interrupts for dequeing packets
     if (queue_dequeue(new_sock->pkt_q, (void**)&pkt) == -1){
       *error = SOCKET_RECEIVEERROR;
       set_interrupt_level(l);
       continue;
     }
+    set_interrupt_level(l);
+
     //check packet size at least sizeof tcp header
     if (pkt->size < sizeof(struct mini_header_reliable)) {
       *error = SOCKET_RECEIVEERROR;
       free(pkt);
-      set_interrupt_level(l);
       continue;
     }
     pkt_hdr = (mini_header_reliable_t)(&pkt->buffer);
     protocol = pkt_hdr->protocol;
-    if (protocol != PROTOCOL_MINISTREAM){
+    if (protocol != PROTOCOL_MINISTREAM  ){
       *error = SOCKET_RECEIVEERROR;
       free(pkt);
-      set_interrupt_level(l);
       continue;
     }
     unpack_address(pkt_hdr->source_address, new_sock->dst_addr);
@@ -252,24 +302,50 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
     seq_num = unpack_unsigned_int(pkt_hdr->seq_number);
     ack_num = unpack_unsigned_int(pkt_hdr->ack_number);
     if (new_sock->dst_port < CLIENT_START || new_sock->dst_port >= NUM_SOCKETS
-        || !network_compare_network_addresses(dst_addr, my_addr)
-        || pkt_hdr->message_type != MSG_SYN || seq_num != 1 || ack_num != 0){
+          || !network_compare_network_addresses(dst_addr, my_addr) ){
       *error = SOCKET_RECEIVEERROR;
       free(pkt);
-      set_interrupt_level(l);
       continue;
     }
-    
-    new_sock->curr_state = WAIT;
-    new_sock->curr_ack++;
-    // create SYNACK packet
-    minisocket_send_ack(MSG_SYNACK, new_sock, error);
 
-    set_interrupt_level(l);
+    switch (new_sock->curr_state){
+    case LISTEN:
+      if (pkt_hdr->message_type != MSG_SYN || seq_num != 1 || ack_num != 0){
+        *error = SOCKET_RECEIVEERROR;
+        free(pkt);
+        continue;
+      }
+      
+      new_sock->curr_state = WAIT;
+      new_sock->curr_ack++;
+      // send SYNACK
+      minisocket_send_ack(MSG_SYNACK, new_sock, error);
+
+      resend_alarm_arg.sock = new_sock;
+      resend_alarm_arg.data_len = 0;
+      resend_alarm_arg.data = pkt->buffer; //placeholder
+      resend_alarm_arg.error = error; 
+      new_sock->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
+      break;
+    case WAIT:
+      if (pkt_hdr->message_type != MSG_ACK || seq_num != 1 || ack_num != 1){
+        *error = SOCKET_RECEIVEERROR;
+        free(pkt);
+        continue;
+      }
+      new_sock->curr_state = CONNECTED;
+      new_sock->try_count = 0;
+      new_sock->resend_alarm = NULL;
+      deregister_alarm(new_sock->resend_alarm);
+      break;
+    default:
+      *error = SOCKET_RECEIVEERROR;
+      free(pkt);
+      break;
+    }
   }
   return new_sock;
 }
-
 
 /*
  * Initiate the communication with a remote site. When communication is
