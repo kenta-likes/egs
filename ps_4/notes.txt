@@ -1,0 +1,1 @@
+When server is in LISTEN mode, ONLY V(ack_ready_sem) if the packet is MSG_SYN, otherwise drop.
