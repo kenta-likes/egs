@@ -276,6 +276,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
     return NULL;
   }
   semaphore_initialize(new_sock->pkt_ready_sem, 0);
+  semaphore_initialize(new_sock->ack_ready_sem, 0);
   semaphore_initialize(new_sock->sock_lock, 1);
 
   new_sock->curr_state = LISTEN;
@@ -465,7 +466,19 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
     *error = SOCKET_OUTOFMEMORY;
     return NULL;
   }
+  new_sock->ack_ready_sem = semaphore_create();
+  if (!(new_sock->ack_ready_sem)){
+    semaphore_V(client_lock);
+    semaphore_destroy(new_sock->pkt_ready_sem);
+    queue_free(new_sock->pkt_q);
+    semaphore_destroy(new_sock->sock_lock);
+    free(new_sock);
+    *error = SOCKET_OUTOFMEMORY;
+    return NULL;
+  }
+  
   semaphore_initialize(new_sock->pkt_ready_sem, 0);
+  semaphore_initialize(new_sock->ack_ready_sem, 0);
   semaphore_initialize(new_sock->sock_lock, 1);
 
   new_sock->curr_state = WAIT;
