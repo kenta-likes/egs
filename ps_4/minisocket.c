@@ -566,5 +566,8 @@ void minisocket_close(minisocket_t socket)
 {
   //idea: send close, wait using alarms
   //after 7 retries, close connection
+  //set state to close_wait
+  //P on ack_ready
+  //if ack_ready, close connection
 
 }
