@@ -16,7 +16,7 @@
 #define CLIENT_START 32768
 #define RESEND_TIME_UNIT 1
 
-typedef enum state { LISTEN = 1, CONNECTING, CONNECTED, WAIT, EXIT} state;
+typedef enum state { LISTEN = 1, CONNECTED, WAIT, EXIT} state;
 
 struct minisocket
 {
@@ -37,6 +37,7 @@ typedef struct resend_arg {
   minisocket_t sock;
   unsigned int data_len;
   char* data;
+  char msg_type;
   minisocket_error *error;
 }* resend_arg_t;
 
@@ -44,6 +45,8 @@ minisocket_t* sock_array;
 semaphore_t client_lock;
 semaphore_t server_lock;
 network_address_t my_addr;
+unsigned short curr_client_idx;
+
 
 /* minisocket_resend takes in a resend_arg with fields on the socket on which the send,
  * and what to send.
@@ -55,7 +58,7 @@ network_address_t my_addr;
  */
 void minisocket_resend(void* arg);
 
-/* minisocket_send_ack creates an ack packet of type ack_type and with
+/* minisocket_send_ctrl creates an ctrl packet of type type and with
  * fields taken from the sock parameter.
  * This ack packet is sent over the network.
  * If there is an underlying network failure, error is updated
@@ -63,14 +66,14 @@ void minisocket_resend(void* arg);
  * The address of pkt is given as the data buffer, 
  * but no data from pkt is written since the data_len is 0.
  */ 
-void minisocket_send_ack(char ack_type, minisocket_t sock, minisocket_error* error) {
+void minisocket_send_ctrl(char type, minisocket_t sock, minisocket_error* error) {
   struct mini_header_reliable pkt;
   pkt.protocol = PROTOCOL_MINISTREAM;
   pack_address(pkt.source_address, my_addr);
   pack_unsigned_short(pkt.source_port, sock->src_port);
   pack_address(pkt.destination_address, sock->dst_addr);
   pack_unsigned_short(pkt.destination_port, sock->dst_port);
-  pkt.message_type = ack_type;
+  pkt.message_type = type;
   pack_unsigned_int(pkt.seq_number, sock->curr_seq);
   pack_unsigned_int(pkt.ack_number, sock->curr_ack);
   
@@ -126,8 +129,25 @@ void minisocket_resend(void* arg) {
   }
   
   wait_cycles = (1 << params->sock->try_count) * RESEND_TIME_UNIT;
-  minisocket_send_data(params->sock, params->data_len, params->data, params->error); 
-  params->sock->resend_alarm = set_alarm(wait_cycles, minisocket_resend, arg, minithread_time());
+  switch (params->msg_type) {
+  case MSG_SYN:
+    minisocket_send_ctrl(MSG_SYN, params->sock, params->error);
+    break;
+  case MSG_SYNACK:
+    minisocket_send_ctrl(MSG_SYNACK, params->sock, params->error);
+    break;
+  case MSG_FIN:
+    minisocket_send_ctrl(MSG_FIN, params->sock, params->error);
+    break;
+  case MSG_ACK:
+    minisocket_send_data(params->sock, params->data_len, params->data, params->error);
+    break;
+  default:
+    // error
+    return;
+  }
+  params->sock->resend_alarm = set_alarm(wait_cycles, 
+      minisocket_resend, arg, minithread_time());
 
 }
 
@@ -153,6 +173,7 @@ void minisocket_initialize()
   semaphore_initialize(client_lock, 1);
   semaphore_initialize(server_lock, 1);
   network_get_my_address(my_addr);
+  curr_client_idx = CLIENT_START;
 }
 
 void minisocket_destroy(minisocket_t sock, minisocket_error* error){
@@ -265,7 +286,6 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
     /*failed 7 times, revert to listen state*/
     if (new_sock->curr_state == EXIT){
       *error = SOCKET_SENDERROR;
-      free(new_sock->pkt_ready_sem);
       while (queue_dequeue(new_sock->pkt_q,(void**)&pkt) != -1){
         free(pkt);
       }
@@ -307,7 +327,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
       free(pkt);
       continue;
     }
-
+    
     switch (new_sock->curr_state){
     case LISTEN:
       if (pkt_hdr->message_type != MSG_SYN || seq_num != 1 || ack_num != 0){
@@ -319,15 +339,19 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
       new_sock->curr_state = WAIT;
       new_sock->curr_ack++;
       // send SYNACK
-      minisocket_send_ack(MSG_SYNACK, new_sock, error);
+      minisocket_send_ctrl(MSG_SYNACK, new_sock, error);
 
       resend_alarm_arg.sock = new_sock;
+      resend_alarm_arg.msg_type = MSG_SYNACK;
       resend_alarm_arg.data_len = 0;
       resend_alarm_arg.data = pkt->buffer; //placeholder
       resend_alarm_arg.error = error; 
       new_sock->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
       break;
     case WAIT:
+      if (pkt_hdr->message_type == MSG_SYN) {
+        minisocket_send_ctrl(MSG_FIN, new_sock, error);
+      }
       if (pkt_hdr->message_type != MSG_ACK || seq_num != 1 || ack_num != 1){
         *error = SOCKET_RECEIVEERROR;
         free(pkt);
@@ -337,10 +361,16 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
       new_sock->try_count = 0;
       new_sock->resend_alarm = NULL;
       deregister_alarm(new_sock->resend_alarm);
+      *error = SOCKET_NOERROR;
+      free(pkt);
       break;
     default:
+      if (pkt_hdr->message_type == MSG_SYN) {
+        minisocket_send_ctrl(MSG_FIN, new_sock, error);
+      }
       *error = SOCKET_RECEIVEERROR;
       free(pkt);
+      new_sock->curr_state = EXIT;
       break;
     }
   }
@@ -363,7 +393,159 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
  */
 minisocket_t minisocket_client_create(network_address_t addr, int port, minisocket_error *error)
 {
-  return NULL;
+  minisocket_t new_sock;
+  interrupt_level_t l;
+  network_interrupt_arg_t * pkt;
+  mini_header_reliable_t pkt_hdr;
+  char protocol;
+  network_address_t dst_addr;
+  unsigned int seq_num;
+  unsigned int ack_num;
+  struct resend_arg resend_alarm_arg;
+  unsigned short start; 
+
+  //check valid portnum
+  if (port < 0 || port >= CLIENT_START) {
+    *error = SOCKET_INVALIDPARAMS;
+    return NULL;
+  }
+
+  semaphore_P(client_lock);
+  start = curr_client_idx;
+  while (sock_array[curr_client_idx] != NULL){
+    curr_client_idx++;
+    if (curr_client_idx >= NUM_SOCKETS){
+      curr_client_idx = CLIENT_START;
+    }
+    if (curr_client_idx == start){ // client sockets full
+      semaphore_V(client_lock);
+      *error = SOCKET_NOMOREPORTS; 
+      return NULL;
+    }
+  }
+ 
+  new_sock = (minisocket_t)malloc(sizeof(struct minisocket));
+  if (!new_sock){
+    semaphore_V(client_lock);
+    *error = SOCKET_OUTOFMEMORY;
+    return NULL;
+  }
+  new_sock->pkt_ready_sem = semaphore_create();
+  if (!(new_sock->pkt_ready_sem)){
+    semaphore_V(client_lock);
+    free(new_sock);
+    *error = SOCKET_OUTOFMEMORY;
+    return NULL;
+  }
+  new_sock->pkt_q = queue_new();
+  if (!(new_sock->pkt_q)){
+    semaphore_V(client_lock);
+    free(new_sock->pkt_ready_sem);
+    free(new_sock);
+    *error = SOCKET_OUTOFMEMORY;
+    return NULL;
+  }
+  new_sock->sock_lock = semaphore_create();
+  if (!(new_sock->sock_lock)){
+    semaphore_V(client_lock);
+    free(new_sock->pkt_ready_sem);
+    free(new_sock->pkt_q);
+    free(new_sock);
+    *error = SOCKET_OUTOFMEMORY;
+    return NULL;
+  }
+  semaphore_initialize(new_sock->pkt_ready_sem, 0);
+  semaphore_initialize(new_sock->sock_lock, 1);
+
+  new_sock->curr_state = WAIT;
+  new_sock->try_count = 0;
+  new_sock->curr_ack = 0;
+  new_sock->curr_seq = 1;
+  new_sock->resend_alarm = NULL; //no alarm set
+  new_sock->src_port = curr_client_idx;
+  new_sock->dst_port = port; 
+  network_address_copy(addr, new_sock->dst_addr);
+
+  sock_array[curr_client_idx++] = new_sock;
+  semaphore_V(client_lock);
+ 
+  minisocket_send_ctrl(MSG_SYN, new_sock, error);
+  resend_alarm_arg.sock = new_sock;
+  resend_alarm_arg.msg_type = MSG_SYN;
+  resend_alarm_arg.data_len = 0;
+  resend_alarm_arg.data = &protocol; //placeholder
+  resend_alarm_arg.error = error; 
+  new_sock->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
+
+  while (new_sock->curr_state != CONNECTED) {
+    semaphore_P(new_sock->pkt_ready_sem);
+
+    /*failed 7 times, revert to listen state*/
+    if (new_sock->curr_state == EXIT){
+      *error = SOCKET_NOSERVER;
+      minisocket_destroy(new_sock, error);
+      return NULL;
+    }
+
+    l = set_interrupt_level(DISABLED);
+    //disable interrupts for dequeing packets
+    if (queue_dequeue(new_sock->pkt_q, (void**)&pkt) == -1){
+      *error = SOCKET_RECEIVEERROR;
+      set_interrupt_level(l);
+      continue;
+    }
+    set_interrupt_level(l);
+
+    //check packet size at least sizeof tcp header
+    if (pkt->size < sizeof(struct mini_header_reliable)) {
+      *error = SOCKET_RECEIVEERROR;
+      free(pkt);
+      continue;
+    }
+    pkt_hdr = (mini_header_reliable_t)(&pkt->buffer);
+    protocol = pkt_hdr->protocol;
+    if (protocol != PROTOCOL_MINISTREAM  ){
+      *error = SOCKET_RECEIVEERROR;
+      free(pkt);
+      continue;
+    }
+    unpack_address(pkt_hdr->source_address, new_sock->dst_addr);
+    new_sock->dst_port = unpack_unsigned_short(pkt_hdr->source_port);
+    unpack_address(pkt_hdr->destination_address, dst_addr);
+    seq_num = unpack_unsigned_int(pkt_hdr->seq_number);
+    ack_num = unpack_unsigned_int(pkt_hdr->ack_number);
+    if (new_sock->dst_port >= CLIENT_START || new_sock->dst_port < 0
+          || !network_compare_network_addresses(dst_addr, my_addr) ){
+      *error = SOCKET_RECEIVEERROR;
+      free(pkt);
+      continue;
+    }
+
+    switch(new_sock->curr_state) {
+    case WAIT:
+      if (pkt_hdr->message_type != MSG_SYNACK || seq_num != 1 || ack_num != 1){
+        *error = SOCKET_RECEIVEERROR;
+        free(pkt);
+        continue;
+      }
+      new_sock->curr_state = CONNECTED;
+      new_sock->try_count = 0;
+      new_sock->resend_alarm = NULL;
+      deregister_alarm(new_sock->resend_alarm);
+      *error = SOCKET_NOERROR;
+      free(pkt);
+      minisocket_send_ctrl(MSG_ACK, new_sock, error);
+      break;
+
+    default:
+      // error
+      free(pkt);
+      *error = SOCKET_RECEIVEERROR;
+      new_sock->curr_state = EXIT;
+      break;
+    }
+  }
+  return new_sock;
 }
 
 
