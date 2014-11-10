@@ -214,11 +214,11 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
   minisocket_t new_sock;
   interrupt_level_t l;
   network_interrupt_arg_t * pkt;
-  mini_header_reliable_t pkt_hdr;
+  /*mini_header_reliable_t pkt_hdr;
   char protocol;
   network_address_t dst_addr;
   unsigned int seq_num;
-  unsigned int ack_num;
+  unsigned int ack_num;*/
   struct resend_arg resend_alarm_arg;
   
 
