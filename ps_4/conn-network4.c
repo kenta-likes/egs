@@ -1,8 +1,10 @@
 /* 
  *    conn-network test program 4
  *
- *    spawns two threads, both of which send a big message
- *    and receive the big messages
+ *    Spawns two threads, both of which send a big message
+ *    and receive the big messages. If both sockets receive
+ *    what they expect from the other socket, they print
+ *    a success message and return.
 */
 
 #include "defs.h"
