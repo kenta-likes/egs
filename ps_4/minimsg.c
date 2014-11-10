@@ -76,22 +76,22 @@ minimsg_initialize() {
   }
   unbound_ports_lock = semaphore_create();
   if (!unbound_ports_lock){
-    free(bound_ports_lock);
+    semaphore_destroy(bound_ports_lock);
     return;
   }
   
   pkt_available_sem = semaphore_create();
   if (!pkt_available_sem){
-    free(bound_ports_lock);
-    free(unbound_ports_lock);
+    semaphore_destroy(bound_ports_lock);
+    semaphore_destroy(unbound_ports_lock);
     return;
   }
 
   pkt_q = queue_new();
   if (!pkt_q){
-    free(bound_ports_lock);
-    free(unbound_ports_lock);
-    free(pkt_available_sem);
+    semaphore_destroy(bound_ports_lock);
+    semaphore_destroy(unbound_ports_lock);
+    semaphore_destroy(pkt_available_sem);
     return;
   }
 

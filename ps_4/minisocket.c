@@ -26,6 +26,7 @@ struct minisocket
   unsigned int curr_seq;
   alarm_t resend_alarm; 
   semaphore_t pkt_ready_sem; 
+  semaphore_t ack_ready_sem;
   semaphore_t sock_lock; //all mighty sock lock
   queue_t pkt_q;
   unsigned short src_port;
@@ -183,7 +184,6 @@ void minisocket_destroy(minisocket_t sock, minisocket_error* error){
   sock_array[sock->src_port] = NULL;
   semaphore_V(server_lock);
   *error = SOCKET_SENDERROR;
-  free(sock->pkt_ready_sem);
   //free all queued packets. interrupts not disabled
   //because socket in array set to null, network
   //handler cannot access queue
@@ -192,6 +192,7 @@ void minisocket_destroy(minisocket_t sock, minisocket_error* error){
   }
   queue_free(sock->pkt_q);
   semaphore_destroy(sock->pkt_ready_sem);
+  semaphore_destroy(sock->ack_ready_sem);
   semaphore_destroy(sock->sock_lock);
   free(sock);
 }
@@ -250,7 +251,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
   new_sock->pkt_q = queue_new();
   if (!(new_sock->pkt_q)){
     semaphore_V(server_lock);
-    free(new_sock->pkt_ready_sem);
+    semaphore_destroy(new_sock->pkt_ready_sem);
     free(new_sock);
     *error = SOCKET_OUTOFMEMORY;
     return NULL;
@@ -259,7 +260,17 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
   if (!(new_sock->sock_lock)){
     semaphore_V(server_lock);
     free(new_sock->pkt_ready_sem);
-    free(new_sock->pkt_q);
+    queue_free(new_sock->pkt_q);
+    free(new_sock);
+    *error = SOCKET_OUTOFMEMORY;
+    return NULL;
+  }
+  new_sock->ack_ready_sem = semaphore_create();
+  if (!(new_sock->ack_ready_sem)){
+    semaphore_V(server_lock);
+    semaphore_destroy(new_sock->pkt_ready_sem);
+    queue_free(new_sock->pkt_q);
+    semaphore_destroy(new_sock->sock_lock);
     free(new_sock);
     *error = SOCKET_OUTOFMEMORY;
     return NULL;
@@ -440,7 +451,7 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
   new_sock->pkt_q = queue_new();
   if (!(new_sock->pkt_q)){
     semaphore_V(client_lock);
-    free(new_sock->pkt_ready_sem);
+    semaphore_destroy(new_sock->pkt_ready_sem);
     free(new_sock);
     *error = SOCKET_OUTOFMEMORY;
     return NULL;
@@ -448,8 +459,8 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
   new_sock->sock_lock = semaphore_create();
   if (!(new_sock->sock_lock)){
     semaphore_V(client_lock);
-    free(new_sock->pkt_ready_sem);
-    free(new_sock->pkt_q);
+    semaphore_destroy(new_sock->pkt_ready_sem);
+    queue_free(new_sock->pkt_q);
     free(new_sock);
     *error = SOCKET_OUTOFMEMORY;
     return NULL;
