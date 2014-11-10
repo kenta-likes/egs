@@ -51,7 +51,7 @@ queue_t pkt_q;                  // buffer for holding recieved packets for the s
                                 // protected by disabling interrupts
 semaphore_t pkt_available_sem;  // counting sem for the number of packets available
 
-unsigned short curr_bound_index;
+unsigned int curr_bound_index;
 
 
 /* performs any required initialization of the minimsg layer.
@@ -249,13 +249,13 @@ miniport_create_unbound(int port_number) {
 miniport_t
 miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
 {
-  unsigned short start;
+  unsigned int start;
   miniport_t new_port;
 
   semaphore_P(bound_ports_lock);
   start = curr_bound_index;
   while (miniport_array[curr_bound_index] != NULL){
-    curr_bound_index += 1;
+    curr_bound_index++;
     if (curr_bound_index >= MAX_PORT_NUM){
       curr_bound_index = BOUND_PORT_START;
     }

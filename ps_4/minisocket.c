@@ -46,7 +46,7 @@ minisocket_t* sock_array;
 semaphore_t client_lock;
 semaphore_t server_lock;
 network_address_t my_addr;
-unsigned short curr_client_idx;
+unsigned int curr_client_idx;
 
 
 /* minisocket_resend takes in a resend_arg with fields on the socket on which the send,
