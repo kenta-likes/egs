@@ -21,6 +21,14 @@ int port=80; /* port on which we do the communication */
 
 int receive(int* arg); /* forward declaration */
 
+int send_packets(int* arg); //forward declaration
+int receive_packets(int* arg); //forward declaration
+
+semaphore_t server_receive_sem;
+semaphore_t server_send_sem;
+semaphore_t client_receive_sem;
+semaphore_t client_send_sem;
+
 char* GetErrorDescription(int errorcode){
   switch(errorcode){
   case SOCKET_NOERROR:
@@ -56,6 +64,52 @@ char* GetErrorDescription(int errorcode){
   }
 }
 
+/*
+ * receive function for SERVER's receive thread
+ * */
+int receive_packets(int* arg){
+  char buffer[BUFFER_SIZE];
+  int i;
+  int bytes_received;
+  minisocket_t socket;
+  minisocket_error error;
+
+  socket = (minisocket_t)arg;
+
+  /* receive the message */
+  bytes_received=0;
+  while (bytes_received!=BUFFER_SIZE){
+    int received_bytes;
+    if ((received_bytes=minisocket_receive(socket,buffer, BUFFER_SIZE-bytes_received, &error))==-1){
+      printf("ERROR: %s. Exiting. \n",GetErrorDescription(error));
+      /* close the connection */
+      minisocket_close(socket);
+      semaphore_V(server_send_sem); //sender thread
+      return -1;
+    }   
+    /* test the information received */
+    for (i=0; i<received_bytes; i++){
+      if (buffer[i]!=(char)( (bytes_received+i)%256 )){
+	printf("The %d'th byte received is wrong.\n",
+	       bytes_received+i);
+	/* close the connection */
+	minisocket_close(socket);
+  semaphore_V(server_send_sem); //sender thread
+	return -1;
+      }
+    }
+	      
+    bytes_received+=received_bytes;
+  }
+
+  //printf("All bytes received correctly.\n");
+
+  semaphore_V(server_send_sem); //sender thread
+  semaphore_P(server_receive_sem); //myself
+  return 0;
+
+}
+
 int transmit(int* arg) {
   char buffer[BUFFER_SIZE];
   int i;
@@ -69,8 +123,12 @@ int transmit(int* arg) {
   socket = minisocket_server_create(port,&error);
   if (socket==NULL){
     printf("ERROR: %s. Exiting. \n",GetErrorDescription(error));
+    semaphore_V(server_receive_sem); //receiver thread
     return -1;
   }
+
+  //create server's receive socket
+  minithread_fork(receive_packets, (int*)socket);
 
   /* Fill in the buffer with numbers from 0 to BUFFER_SIZE-1 */
   for (i=0; i<BUFFER_SIZE; i++){
@@ -91,16 +149,63 @@ int transmit(int* arg) {
       /* close the connection */
       minisocket_close(socket);
     
+      semaphore_V(server_receive_sem); //receiver thread
       return -1;
     }   
 
     bytes_sent+=trans_bytes;
   }
 
-  /* close the connection */
+  /* close the connection. make sure send and receive end together */
+  semaphore_V(server_receive_sem); //receiver thread
+  semaphore_P(server_send_sem); //myself
   minisocket_close(socket);
 
   return 0;
+}
+
+/*
+ * send method for CLIENT's send thread
+ * */
+int send_packets(int* arg){
+  char buffer[BUFFER_SIZE];
+  int i;
+  int bytes_sent;
+  minisocket_t socket; //socket sending from
+  minisocket_error error;
+
+  socket = (minisocket_t)arg;
+
+  /* Fill in the buffer with numbers from 0 to BUFFER_SIZE-1 */
+  for (i=0; i<BUFFER_SIZE; i++){
+    buffer[i]=(char)(i%256);
+  }
+
+  /* send the message */
+  bytes_sent=0;
+  while (bytes_sent!=BUFFER_SIZE){
+    int trans_bytes=
+      minisocket_send(socket,buffer+bytes_sent,
+		      BUFFER_SIZE-bytes_sent, &error);
+  
+    printf("Sent %d bytes.\n",trans_bytes);
+
+    if (error!=SOCKET_NOERROR){
+      printf("ERROR: %s. Exiting. \n",GetErrorDescription(error));
+      /* close the connection */
+      minisocket_close(socket);
+    
+      semaphore_V(client_receive_sem); //receiving thread
+      return -1;
+    }   
+
+    bytes_sent+=trans_bytes;
+  }
+  semaphore_V(client_receive_sem); //receiving thread
+  semaphore_P(client_send_sem); //myself
+  
+  return 0;
+
 }
 
 int receive(int* arg) {
@@ -125,8 +230,12 @@ int receive(int* arg) {
   socket = minisocket_client_create(my_address, port,&error);
   if (socket==NULL){
     printf("ERROR: %s. Exiting. \n",GetErrorDescription(error));
+    semaphore_V(client_send_sem); //sending thread
     return -1;
   }
+
+  //create client's send socket
+  minithread_fork(send_packets, (int*)socket);
 
   /* receive the message */
   bytes_received=0;
@@ -136,6 +245,7 @@ int receive(int* arg) {
       printf("ERROR: %s. Exiting. \n",GetErrorDescription(error));
       /* close the connection */
       minisocket_close(socket);
+      semaphore_V(client_send_sem); //sending thread
       return -1;
     }   
     /* test the information received */
@@ -145,6 +255,7 @@ int receive(int* arg) {
 	       bytes_received+i);
 	/* close the connection */
 	minisocket_close(socket);
+  semaphore_V(client_send_sem); //sending thread
 	return -1;
       }
     }
@@ -153,6 +264,9 @@ int receive(int* arg) {
   }
 
   printf("All bytes received correctly.\n");
+
+  semaphore_V(client_send_sem); //sending thread
+  semaphore_P(client_receive_sem); //myself
   
   minisocket_close(socket);
 
@@ -160,6 +274,33 @@ int receive(int* arg) {
 }
 
 int main(int argc, char** argv) {
+  semaphore_create(server_receive_sem);
+  if (!server_receive_sem){
+    return -1;
+  }
+  semaphore_create(server_send_sem);
+  if (!server_send_sem){
+    semaphore_destroy(server_receive_sem);
+    return -1;
+  }
+  semaphore_create(client_receive_sem);
+  if (!client_receive_sem){
+    semaphore_destroy(server_receive_sem);
+    semaphore_destroy(server_send_sem);
+    return -1;
+  }
+  semaphore_create(client_send_sem);
+  if (!client_send_sem){
+    semaphore_destroy(server_receive_sem);
+    semaphore_destroy(server_send_sem);
+    semaphore_destroy(client_send_sem);
+    return -1;
+  }
+  semaphore_initialize(server_receive_sem, 0);
+  semaphore_initialize(server_send_sem, 0);
+  semaphore_initialize(client_receive_sem, 0);
+  semaphore_initialize(client_send_sem, 0);
+
   minithread_system_initialize(transmit, NULL);
   return -1;
 }
