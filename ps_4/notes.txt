@@ -27,3 +27,9 @@ If we receive MSG_SYN OR MSG_SYNACK in network handler:
       - V(ack_ready_sem)
     - else:
       - drop
+
+In client_create:
+  - when transition from connect_wait to close_rcv, set SOCKET_BUSY error and
+    destroy
+  - assume: In network handler, receiving MSG_FIN always transitions to
+    CLOSE_RCV 

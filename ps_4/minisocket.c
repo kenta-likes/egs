@@ -497,6 +497,12 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
     set_interrupt_level(l); 
     break;
   
+  case CLOSE_RCV:
+    *error = SOCKET_BUSY;
+    minisocket_destroy(new_sock, error);
+    set_interrupt_level(l);
+    new_sock = NULL;
+    break; 
   default:
     // error
     *error = SOCKET_NOSERVER;
@@ -546,21 +552,38 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
  */
 int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisocket_error *error)
 {
+  network_interrupt_arg_t* pkt;
+  char* data;
+  int data_len;
+
   semaphore_P(socket->sock_lock);
   semaphore_P(socket->pkt_ready_sem);
   
-  switch (socket->curr_state) {
-  case CONNECTED:
-    break;
-
-  default:
-    break;
+  if (queue_dequeue(socket->pkt_q, (void**)&pkt) == -1) {
+    *error = SOCKET_SENDERROR;
+    return -1;
   }
-  semaphore_V(socket->sock_lock);
-  return -1;
+
+  if (socket->curr_state == CONNECTED || socket->curr_state == MSG_WAIT) {
+    data = (char*)(pkt->buffer) + sizeof(struct mini_header_reliable);
+    data_len = pkt->size - sizeof(struct mini_header_reliable);
+    if (data_len > max_len) {
+      data_len = max_len;
+    }
+    memcpy(msg, data, data_len);
+    free(pkt);
+    *error = SOCKET_NOERROR; 
+    semaphore_V(socket->sock_lock);
+    return data_len;
+  }
+  else {
+    free(pkt);
+    semaphore_V(socket->sock_lock);
+    return -1;
+  }
 }
-/*typedef enum state {LISTEN = 1, CONNECTING, CONNECT_WAIT, MSG_WAIT, 
-    CLOSE_SEND, CLOSE_RCV, CONNECTED, EXIT} state;*/
+//typedef enum state {LISTEN = 1, CONNECTING, CONNECT_WAIT, MSG_WAIT, 
+  //  CLOSE_SEND, CLOSE_RCV, CONNECTED, EXIT} state;
 
 
 /* Close a connection. If minisocket_close is issued, any send or receive should
