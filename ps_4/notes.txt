@@ -28,6 +28,10 @@ If we receive MSG_SYN OR MSG_SYNACK in network handler:
     - else:
       - drop
 
+
+
+KENTA's NOTES:
+make sure you don't destroy in receive after 7 retries (ie exit)
 In client_create:
   - when transition from connect_wait to close_rcv, set SOCKET_BUSY error and
     destroy

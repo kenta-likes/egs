@@ -123,7 +123,9 @@ void minisocket_resend(void* arg) {
     params->sock->resend_alarm = NULL;
     params->sock->curr_state = EXIT;
     params->sock->try_count = 0;
-    semaphore_V(params->sock->pkt_ready_sem);
+    semaphore_V(params->sock->pkt_ready_sem);//notify to unblock
+    semaphore_V(params->sock->ack_ready_sem);//notify to unblock sender
+    semaphore_V(params->sock->ack_ready_sem);//notify to unblock close
     return; 
   }
   
@@ -489,10 +491,120 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
  *            message to be transmitted (msg) and its length (len).
  * Return value: returns the number of successfully transmitted bytes. Sets the
  *               error code and returns -1 if an error is encountered.
+ *
+ * Comments: invalid params for socket, msg but len = 0 case is ok
  */
 int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_error *error)
 {
-  return -1;
+  unsigned int num_pkt;
+  unsigned int i;
+  interrupt_level_t l;
+  struct resend_arg resend_alarm_arg;
+  unsigned int max_size;
+
+  //max size for PAYLOAD, not entire packet
+  max_size = MAX_NETWORK_PKT_SIZE - sizeof(struct mini_header_reliable);
+  num_pkt = len / max_size + 1; //number of divided packets
+
+  //error checking
+  if (!socket || sock_array[socket->src_port] == NULL || msg == NULL || len < 0)
+  {
+    *error = SOCKET_INVALIDPARAMS;
+    return -1;
+  }
+  //allow this
+  if (len == 0){
+    return 0;
+  }
+  
+
+  //check for invalid cases
+  l = set_interrupt_level(DISABLED);
+  if (socket->curr_state != CONNECTED){
+    if (socket->curr_state == CLOSE_RCV){
+      *error = SOCKET_BUSY;
+      set_interrupt_level(l);
+      return -1;
+    }
+    *error = SOCKET_SENDERROR;
+    set_interrupt_level(l);
+    return -1;
+  }
+
+  //try sending
+  *error = SOCKET_NOERROR;
+  minisocket_send_data(socket,len>max_size ? max_size:len,msg, error);
+  if (*error != SOCKET_NOERROR){
+    set_interrupt_level(l);
+    return -1;
+  }
+  //otherwise register an alarm for resending and proceed
+  resend_alarm_arg.sock = socket;
+  resend_alarm_arg.msg_type = MSG_ACK;
+  resend_alarm_arg.data_len = len>max_size?max_size:len;
+  resend_alarm_arg.data = msg;
+  resend_alarm_arg.error = error;
+
+  if (socket->resend_alarm){
+    deregister_alarm(socket->resend_alarm);
+    socket->resend_alarm = NULL;
+  }
+  socket->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
+  set_interrupt_level(l);
+   
+  i = 0; //set packet num to 1
+  while (i < num_pkt){
+    semaphore_P(socket->ack_ready_sem);
+    l = set_interrupt_level(DISABLED);
+    //packet got acked, deregister alarm from before
+    if (socket->resend_alarm){
+      deregister_alarm(socket->resend_alarm);
+      socket->resend_alarm = NULL;
+    }
+
+    switch (socket->curr_state){
+    case CLOSE_SEND: //closing connection
+      semaphore_V(socket->ack_ready_sem); //notify close thread
+      *error = SOCKET_SENDERROR;
+      set_interrupt_level(l);
+      return i * max_size;
+    case EXIT: //closing connection
+      *error = SOCKET_SENDERROR;
+      set_interrupt_level(l);
+      return i*max_size;
+    case CONNECTED: 
+      minisocket_send_data(socket,
+              i<num_pkt-1? max_size : len-(max_size*i),
+              ((char*)msg) + i*max_size,
+              error);
+      if (*error != SOCKET_NOERROR){
+        set_interrupt_level(l);
+        return -1;
+      }
+      //otherwise register an alarm for resending and proceed
+      resend_alarm_arg.sock = socket;
+      resend_alarm_arg.msg_type = MSG_ACK;
+      resend_alarm_arg.data_len = i<num_pkt-1? max_size : len-(max_size*i);
+      resend_alarm_arg.data = ((char*)msg) + i*max_size;
+      resend_alarm_arg.error = error;
+      if (socket->resend_alarm){
+        deregister_alarm(socket->resend_alarm);
+        socket->resend_alarm = NULL;
+      }
+      socket->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
+      socket->curr_state = MSG_WAIT;
+      set_interrupt_level(l);
+      i++;
+      break;
+    default: // error case, simply return
+      *error = SOCKET_SENDERROR;
+      set_interrupt_level(l);
+      return i * max_size;
+    }
+  }
+  //we sent all the packets!
+  *error = SOCKET_NOERROR;
+  return len;
 }
 
 /*
@@ -598,6 +710,8 @@ void minisocket_close(minisocket_t socket)
     printf("Something went wrong. Close connection failure.\n");
   }
   set_interrupt_level(l);
+
+  semaphore_V(socket->ack_ready_sem); //in case send() is blocked
   return;
 
 }
