@@ -4,21 +4,8 @@
 #include "minisocket.h"
 #include <stdlib.h>
 #include <stdio.h>
-#include "synch.h"
-#include "queue.h"
-#include "alarm.h"
-#include "miniheader.h"
-#include "interrupts.h"
-#include "minithread.h"
 
-#define NUM_SOCKETS 65536
-#define SERVER_START 0
-#define CLIENT_START 32768
-#define RESEND_TIME_UNIT 1
-
-typedef enum state {LISTEN = 1, CONNECTING, CONNECT_WAIT, MSG_WAIT, 
-    CLOSE_SEND, CLOSE_RCV, CONNECTED, EXIT} state;
-
+/*
 struct minisocket
 {
   state curr_state;
@@ -33,7 +20,7 @@ struct minisocket
   unsigned short src_port;
   network_address_t dst_addr;
   unsigned short dst_port;
-};
+};*/
 
 typedef struct resend_arg {
   minisocket_t sock;
@@ -57,7 +44,9 @@ unsigned int minisocket_get_seq(minisocket_t sock) {
   return sock->curr_seq;
 }
 
-
+minisocket_t minisocket_get_socket(int port) {
+  return sock_array[port];
+}
 /* minisocket_resend takes in a resend_arg with fields on the socket on which the send,
  * and what to send.
  * This function will be passed in to an alarm to be called later.
@@ -222,13 +211,8 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
   minisocket_t new_sock;
   interrupt_level_t l;
   network_interrupt_arg_t * pkt;
-  /*mini_header_reliable_t pkt_hdr;
-  char protocol;
-  network_address_t dst_addr;
-  unsigned int seq_num;
-  unsigned int ack_num;*/
   struct resend_arg resend_alarm_arg;
-  
+  char tmp; 
 
   //check valid portnum
   if (port < 0 || port >= CLIENT_START){
@@ -303,51 +287,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
     // wait for MSG_SYN
     semaphore_P(new_sock->ack_ready_sem);
     l = set_interrupt_level(DISABLED);
-
-    /* Sent MSG_SYNACK 7 times w/o response
-     * revert to listen state. 
-     */
-    if (new_sock->curr_state == EXIT) {
-      *error = SOCKET_SENDERROR;
-      // clean out the queue
-      while (queue_dequeue(new_sock->pkt_q,(void**)&pkt) != -1){
-        free(pkt);
-      }
-      new_sock->curr_state = LISTEN;
-      new_sock->curr_ack = 0;
-      new_sock->curr_seq = 1;
-      set_interrupt_level(l);
-      continue;
-    }
-
-    /* 
-    //check packet size at least sizeof tcp header
-    if (pkt->size < sizeof(struct mini_header_reliable)) {
-      *error = SOCKET_RECEIVEERROR;
-      free(pkt);
-      continue;
-    }
-    pkt_hdr = (mini_header_reliable_t)(&pkt->buffer);
-    protocol = pkt_hdr->protocol;
-    if (protocol != PROTOCOL_MINISTREAM  ){
-      *error = SOCKET_RECEIVEERROR;
-      free(pkt);
-      continue;
-    }
-    unpack_address(pkt_hdr->source_address, new_sock->dst_addr);
-    new_sock->dst_port = unpack_unsigned_short(pkt_hdr->source_port);
-    unpack_address(pkt_hdr->destination_address, dst_addr);
-    seq_num = unpack_unsigned_int(pkt_hdr->seq_number);
-    ack_num = unpack_unsigned_int(pkt_hdr->ack_number);
-    if (new_sock->dst_port < CLIENT_START || new_sock->dst_port >= NUM_SOCKETS
-          || !network_compare_network_addresses(dst_addr, my_addr) ){
-      *error = SOCKET_RECEIVEERROR;
-      free(pkt);
-      continue;
-    }
-    */
-
-
+ 
     switch (new_sock->curr_state) {
     case CONNECTING:  
       minisocket_send_ctrl(MSG_SYNACK, new_sock, error);
@@ -355,7 +295,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
       resend_alarm_arg.sock = new_sock;
       resend_alarm_arg.msg_type = MSG_SYNACK;
       resend_alarm_arg.data_len = 0;
-      resend_alarm_arg.data = pkt->buffer; //placeholder
+      resend_alarm_arg.data = &tmp; //placeholder
       resend_alarm_arg.error = error; 
       new_sock->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
       
@@ -374,9 +314,15 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
       set_interrupt_level(l);
       break;
 
-    default:
-      *error = SOCKET_RECEIVEERROR;
-      new_sock->curr_state = EXIT;
+    case EXIT: default:
+      *error = SOCKET_SENDERROR;
+      // clean out the queue
+      while (queue_dequeue(new_sock->pkt_q,(void**)&pkt) != -1){
+        free(pkt);
+      }
+      new_sock->curr_state = LISTEN;
+      new_sock->curr_ack = 0;
+      new_sock->curr_seq = 1;
       set_interrupt_level(l);
       break;
     }
@@ -511,6 +457,7 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
     set_interrupt_level(l);
     new_sock = NULL;
     break; 
+  
   default:
     // error
     *error = SOCKET_NOSERVER;

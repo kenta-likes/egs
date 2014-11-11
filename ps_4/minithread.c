@@ -17,7 +17,8 @@
 #include "alarm.h"
 #include "network.h"
 #include "minimsg.h"
-
+#include "minisocket.h"
+#include "miniheader.h"
 #define LOWEST_PRIORITY 3
 
 typedef struct minithread {
@@ -41,6 +42,7 @@ semaphore_t dead_q_lock = NULL;
 semaphore_t dead_sem = NULL;
 int sys_time = 0;
 const int TIME_QUANTA = 100 * MILLISECOND;
+network_address_t my_addr;
 
 //getter for priority
 int minithread_priority(){
@@ -294,17 +296,168 @@ clock_handler(void* arg) {
  */
 void network_handler(network_interrupt_arg_t* pkt){
   interrupt_level_t l;
+  mini_header_reliable_t pkt_hdr;
+  char protocol;
+  unsigned int seq_num;
+  unsigned int ack_num;
+  minisocket_error error;
+  network_address_t src_addr;
+  network_address_t dst_addr;
+  unsigned int src_port;
+  unsigned int dst_port;
+  minisocket_t sock;
+  int type;
+  int data_len;
+
   l = set_interrupt_level(DISABLED);
-  if (queue_append(pkt_q, pkt)){
-    //queue was not initialized
+  pkt_hdr = (mini_header_reliable_t)(&pkt->buffer);
+  protocol = pkt_hdr->protocol;
+ 
+  if (protocol == PROTOCOL_MINIDATAGRAM) {
+    if (queue_append(pkt_q, pkt)){
+      //queue was not initialized
+      set_interrupt_level(l);
+      return;
+    }
     set_interrupt_level(l);
+    semaphore_V(pkt_available_sem); //wake up packet processor
     return;
   }
-  set_interrupt_level(l);
-  semaphore_V(pkt_available_sem); //wake up packet processor
-  return;
-}
+  else if (protocol == PROTOCOL_MINISTREAM) {
+    // error checking
+    if (pkt->size < sizeof(struct mini_header_reliable)) {
+      free(pkt);
+      set_interrupt_level(l);
+      return;
+    }
+    if (protocol != PROTOCOL_MINISTREAM  ){
+      free(pkt);
+      set_interrupt_level(l);
+      return;
+    }
 
+    unpack_address(pkt_hdr->source_address, src_addr);
+    src_port = unpack_unsigned_short(pkt_hdr->source_port);
+    dst_port = unpack_unsigned_short(pkt_hdr->destination_port);
+    unpack_address(pkt_hdr->destination_address, dst_addr);
+    seq_num = unpack_unsigned_int(pkt_hdr->seq_number);
+    ack_num = unpack_unsigned_int(pkt_hdr->ack_number);
+    data_len = pkt->size - sizeof(struct mini_header_reliable);
+    if (src_port < 0 || dst_port < 0 
+          || src_port >= NUM_SOCKETS || dst_port >= NUM_SOCKETS
+          || !network_compare_network_addresses(dst_addr, my_addr) ){
+      free(pkt);
+      set_interrupt_level(l);
+      return;
+    }
+
+    error = SOCKET_NOERROR;
+    sock = minisocket_get_socket(dst_port);
+    if (sock == NULL) {
+      free(pkt);
+      set_interrupt_level(l);
+      return;
+    }
+    type = pkt_hdr->message_type;
+    switch (sock->curr_state) {
+      default: break;
+    }
+     /*
+      case LISTEN:
+        if (type == MSG_SYN) {
+          sock->curr_ack = 1;
+          semaphore_V(sock->ack_ready_sem);
+          sock->curr_state = CONNECTING;
+          sock->dst_port = src_port;
+          network_address_copy(src_addr, sock->dst_addr);
+        }
+        free(pkt);
+        break;
+      
+      case CONNECTING:
+        if (type == MSG_SYN) {
+          minisocket_send_ctrl(MSG_FIN, sock, &error);
+        } 
+        else if (type == MSG_ACK) {
+          if (seq_num == sock->curr_ack + 1) {
+            semaphore_V(sock->ack_ready_sem);
+            sock->curr_state = CONNECTED;
+            sock->curr_ack++;
+          }
+          if (seq_num == sock->curr_ack && data_len > 0 
+              && sock->curr_ack == (seq_num - 1)) {
+            queue_append(sock->pkt_q, pkt);
+            semaphore_V(sock->pkt_ready_sem);
+            minisocket_send_ctrl(MSG_ACK, sock, &error);
+          }
+        }
+        else {
+          free(pkt);
+        }
+        break;
+      
+      case CONNECT_WAIT:
+        if (type == MSG_SYN) {
+          minisocket_send_ctrl(MSG_FIN, sock, &error);
+        }
+        else if (type == MSG_FIN) {
+          socket->curr_state = CLOSE_RCV;
+        }
+        else if (type == SYN_ACK) {
+          socket->curr_state = CONNECTED;
+          minisocket_send_ctrl(MSG_ACK, sock, &error);
+        }
+        free(pkt); 
+        break;
+      
+//enum { MSG_SYN = 1, MSG_SYNACK, MSG_ACK, MSG_FIN };
+      case MSG_WAIT:
+        if (type == MSG_SYN) {
+          minisocket_send_ctrl(MSG_FIN, sock, &error);
+        } 
+        else if (type == MSG_ACK) {
+          if (seq_num == sock->curr_ack + 1) {
+          semaphore_V(sock->ack_ready_sem);
+          sock->curr_state = CONNECTED;
+          sock->curr_ack++;
+          }
+          if (seq_num == sock->curr_ack && data_len > 0 
+              && sock->curr_ack == (seq_num - 1)) {
+            queue_enqueue(sock->pkt_q, pkt);
+            semaphore_V(sock->pkt_ready_sem);
+            minisocket_send_ctrl(MSG_ACK, sock, &error);
+          }
+        }        
+        break;
+
+      case CLOSE_SEND:
+        if (type == MSG_SYN) {
+          minisocket_send_ctrl(MSG_FIN, sock, &error);
+        }
+        break;
+
+      case CLOSE_RCV:
+        if (type == MSG_SYN) {
+          minisocket_send_ctrl(MSG_FIN, sock, &error);
+        }
+        break;
+
+      case CONNECTED:
+        if (type == MSG_SYN) {
+          minisocket_send_ctrl(MSG_FIN, sock, &error);
+        }
+        break;
+
+      case EXIT: 
+        break;
+      default:
+        break;
+      }
+      */
+    set_interrupt_level(l);
+
+  }   
+}
 
 void
 wake_up(void* sem){
@@ -327,8 +480,7 @@ minithread_sleep_with_timeout(int delay){
   semaphore_destroy(thread_sem);
 }
 
-/*
- * Initialization.
+/* Initialization.
  *
  *      minithread_system_initialize:
  *       This procedure should be called from your C main procedure
@@ -352,6 +504,7 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   void* dummy_ptr = NULL;
   dummy_ptr = (void*)&a;
   current_id = 0; // the next thread id to be assigned
+  network_get_my_address(my_addr);
   id_lock = semaphore_create();
   semaphore_initialize(id_lock,1); 
   runnable_q = multilevel_queue_new(4);

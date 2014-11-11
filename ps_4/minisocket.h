@@ -13,6 +13,33 @@
 
 #include "network.h"
 #include "minimsg.h"
+#include "synch.h"
+#include "queue.h"
+#include "alarm.h"
+#include "miniheader.h"
+#include "interrupts.h"
+#include "minithread.h"
+
+
+typedef enum state {LISTEN = 1, CONNECTING, CONNECT_WAIT, MSG_WAIT, 
+    CLOSE_SEND, CLOSE_RCV, CONNECTED, EXIT} state;
+
+
+struct minisocket
+{
+  state curr_state;
+  int try_count;
+  unsigned int curr_ack;
+  unsigned int curr_seq;
+  alarm_t resend_alarm; 
+  semaphore_t pkt_ready_sem; 
+  semaphore_t ack_ready_sem;
+  semaphore_t sock_lock; //all mighty sock lock
+  queue_t pkt_q;
+  unsigned short src_port;
+  network_address_t dst_addr;
+  unsigned short dst_port;
+};
 
 typedef struct minisocket* minisocket_t;
 typedef enum minisocket_error minisocket_error;
@@ -30,11 +57,19 @@ enum minisocket_error {
   SOCKET_OUTOFMEMORY    /* function could not complete because of insufficient memory */
 };
 
+#define NUM_SOCKETS 65536
+#define SERVER_START 0
+#define CLIENT_START 32768
+#define RESEND_TIME_UNIT 1
 
 
 unsigned int minisocket_get_seq(minisocket_t sock);
 
 unsigned int minisocket_get_ack(minisocket_t sock);
+
+minisocket_t minisocket_get_socket(int port); 
+
+void minisocket_destroy(minisocket_t sock, minisocket_error* error);
 
 /* minisocket_send_ctrl creates an ctrl packet of type type and with
  * fields taken from the sock parameter.
@@ -44,7 +79,8 @@ unsigned int minisocket_get_ack(minisocket_t sock);
  * The address of pkt is given as the data buffer, 
  * but no data from pkt is written since the data_len is 0.
  */ 
-void minisocket_send_ctrl(char type, minisocket_t sock, minisocket_error* error) {
+
+void minisocket_send_ctrl(char type, minisocket_t sock, minisocket_error* error);
 
 
 /* Initializes the minisocket layer. */
