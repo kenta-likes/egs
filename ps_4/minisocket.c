@@ -49,6 +49,14 @@ semaphore_t server_lock;
 network_address_t my_addr;
 unsigned int curr_client_idx;
 
+unsigned int minisocket_get_ack(minisocket_t sock) {
+  return sock->curr_ack;
+}
+
+unsigned int minisocket_get_seq(minisocket_t sock) {
+  return sock->curr_seq;
+}
+
 
 /* minisocket_resend takes in a resend_arg with fields on the socket on which the send,
  * and what to send.
@@ -555,12 +563,16 @@ int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisock
   network_interrupt_arg_t* pkt;
   char* data;
   int data_len;
+  interrupt_level_t l;
 
   semaphore_P(socket->sock_lock);
   semaphore_P(socket->pkt_ready_sem);
   
+  l = set_interrupt_level(DISABLED);
   if (queue_dequeue(socket->pkt_q, (void**)&pkt) == -1) {
     *error = SOCKET_SENDERROR;
+    semaphore_V(socket->sock_lock);
+    set_interrupt_level(l);
     return -1;
   }
 
@@ -574,17 +586,16 @@ int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisock
     free(pkt);
     *error = SOCKET_NOERROR; 
     semaphore_V(socket->sock_lock);
+    set_interrupt_level(l);
     return data_len;
   }
   else {
     free(pkt);
     semaphore_V(socket->sock_lock);
+    set_interrupt_level(l);
     return -1;
   }
 }
-//typedef enum state {LISTEN = 1, CONNECTING, CONNECT_WAIT, MSG_WAIT, 
-  //  CLOSE_SEND, CLOSE_RCV, CONNECTED, EXIT} state;
-
 
 /* Close a connection. If minisocket_close is issued, any send or receive should
  * fail.  As soon as the other side knows about the close, it should fail any
