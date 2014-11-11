@@ -16,7 +16,8 @@
 #define CLIENT_START 32768
 #define RESEND_TIME_UNIT 1
 
-typedef enum state {LISTEN = 1, CONNECTING, CONNECT_WAIT, MSG_WAIT, CLOSE_SEND, CLOSE_RCV, CONNECTED, BREAKUP} state;
+typedef enum state {LISTEN = 1, CONNECTING, CONNECT_WAIT, MSG_WAIT, 
+    CLOSE_SEND, CLOSE_RCV, CONNECTED, EXIT} state;
 
 struct minisocket
 {
@@ -198,8 +199,7 @@ void minisocket_destroy(minisocket_t sock, minisocket_error* error){
 }
 
 
-/* 
- * Listen for a connection from somebody else. When communication link is
+/* Listen for a connection from somebody else. When communication link is
  * created return a minisocket_t through which the communication can be made
  * from now on.
  *
@@ -338,6 +338,8 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
       continue;
     }
     */
+
+
     switch (new_sock->curr_state) {
     case CONNECTING:  
       minisocket_send_ctrl(MSG_SYNACK, new_sock, error);
@@ -349,11 +351,11 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
       resend_alarm_arg.error = error; 
       new_sock->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
       
-      new_sock->curr_state = WAIT;
+      new_sock->curr_state = MSG_WAIT;
       set_interrupt_level(l);
       break;
 
-    case WAIT:
+    case MSG_WAIT:
       // must have gotten a MSG_ACK 
       new_sock->curr_state = CONNECTED;
       new_sock->try_count = 0;
@@ -480,40 +482,30 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
   resend_alarm_arg.error = error; 
   new_sock->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
 
-  while (new_sock->curr_state != CONNECTED) {
-    semaphore_P(new_sock->ack_ready_sem);
-    l = set_interrupt_level(DISABLED);
+  semaphore_P(new_sock->ack_ready_sem);
+  l = set_interrupt_level(DISABLED);
 
-    /* Sent MSG_SYN 7 times w/o response
-     * FAIL and return. 
-     */
-    if (new_sock->curr_state == EXIT){
-      *error = SOCKET_NOSERVER;
-      minisocket_destroy(new_sock, error);
-      set_interrupt_level(l); 
-      return NULL;
-    }
-
-    switch(new_sock->curr_state) {
-    case CONNECT_WAIT: 
-      // must have gotten a MSG_SYNACK
-      new_sock->curr_state = CONNECTED;
-      new_sock->try_count = 0;
-      new_sock->resend_alarm = NULL;
-      deregister_alarm(new_sock->resend_alarm);
-      *error = SOCKET_NOERROR;
-      minisocket_send_ctrl(MSG_ACK, new_sock, error);
-      set_interrupt_level(l); 
-      break;
-    
-    default:
-      // error
-      *error = SOCKET_RECEIVEERROR;
-      new_sock->curr_state = EXIT;
-      set_interrupt_level(l); 
-      break;
-    }
+  switch(new_sock->curr_state) {
+  case CONNECT_WAIT: 
+    // must have gotten a MSG_SYNACK
+    new_sock->curr_state = CONNECTED;
+    new_sock->try_count = 0;
+    new_sock->resend_alarm = NULL;
+    deregister_alarm(new_sock->resend_alarm);
+    *error = SOCKET_NOERROR;
+    minisocket_send_ctrl(MSG_ACK, new_sock, error);
+    set_interrupt_level(l); 
+    break;
+  
+  default:
+    // error
+    *error = SOCKET_NOSERVER;
+    minisocket_destroy(new_sock, error);
+    set_interrupt_level(l); 
+    new_sock = NULL;
+    break;
   }
+
   return new_sock;
 }
 
@@ -556,6 +548,7 @@ int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisock
 {
   semaphore_P(socket->sock_lock);
   semaphore_P(socket->pkt_ready_sem);
+  
   switch (socket->curr_state) {
   case CONNECTED:
     break;
@@ -566,6 +559,9 @@ int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisock
   semaphore_V(socket->sock_lock);
   return -1;
 }
+/*typedef enum state {LISTEN = 1, CONNECTING, CONNECT_WAIT, MSG_WAIT, 
+    CLOSE_SEND, CLOSE_RCV, CONNECTED, EXIT} state;*/
+
 
 /* Close a connection. If minisocket_close is issued, any send or receive should
  * fail.  As soon as the other side knows about the close, it should fail any
