@@ -30,6 +30,23 @@ enum minisocket_error {
   SOCKET_OUTOFMEMORY    /* function could not complete because of insufficient memory */
 };
 
+
+
+unsigned int minisocket_get_seq(minisocket_t sock);
+
+unsigned int minisocket_get_ack(minisocket_t sock);
+
+/* minisocket_send_ctrl creates an ctrl packet of type type and with
+ * fields taken from the sock parameter.
+ * This ack packet is sent over the network.
+ * If there is an underlying network failure, error is updated
+ * but the pkt is not resent.
+ * The address of pkt is given as the data buffer, 
+ * but no data from pkt is written since the data_len is 0.
+ */ 
+void minisocket_send_ctrl(char type, minisocket_t sock, minisocket_error* error) {
+
+
 /* Initializes the minisocket layer. */
 void minisocket_initialize();
 
