@@ -574,10 +574,35 @@ int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisock
  */
 void minisocket_close(minisocket_t socket)
 {
-  //idea: send close, wait using alarms
-  //after 7 retries, close connection
+  interrupt_level_t l;
+  minisocket_error error;
+  struct resend_arg resend_alarm_arg;
+
   //set state to close_wait
+  //send close, wait using alarms
+  //(after 7 retries, close connection)
   //P on ack_ready
   //if ack_ready, close connection
+
+  l = set_interrupt_level(DISABLED);
+  socket->curr_state = CLOSE_SEND;
+  socket->try_count = 0;
+
+  minisocket_send_ctrl( MSG_FIN, socket, &error);
+
+  resend_alarm_arg.sock = socket;
+  resend_alarm_arg.msg_type = MSG_FIN;
+  resend_alarm_arg.data_len = 0;
+  resend_alarm_arg.data = (char*) &socket; //placeholder
+  resend_alarm_arg.error = &error;
+  if (socket->resend_alarm){
+    deregister_alarm(socket->resend_alarm);
+  }
+  socket->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
+
+  set_interrupt_level(l);
+
+  semaphore_P(socket->ack_ready_sem); //wait for ack packet...
+  //received ack, close connection
 
 }
