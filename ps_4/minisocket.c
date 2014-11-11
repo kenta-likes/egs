@@ -593,6 +593,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
       }
       socket->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
       socket->curr_state = MSG_WAIT;
+      (socket->curr_seq)++;
       set_interrupt_level(l);
       i++;
       break;

@@ -360,9 +360,6 @@ void network_handler(network_interrupt_arg_t* pkt){
     }
     type = pkt_hdr->message_type;
     switch (sock->curr_state) {
-      default: break;
-    }
-     /*
       case LISTEN:
         if (type == MSG_SYN) {
           sock->curr_ack = 1;
@@ -401,10 +398,10 @@ void network_handler(network_interrupt_arg_t* pkt){
           minisocket_send_ctrl(MSG_FIN, sock, &error);
         }
         else if (type == MSG_FIN) {
-          socket->curr_state = CLOSE_RCV;
+          sock->curr_state = CLOSE_RCV;
         }
-        else if (type == SYN_ACK) {
-          socket->curr_state = CONNECTED;
+        else if (type == MSG_SYNACK) {
+          sock->curr_state = CONNECTED;
           minisocket_send_ctrl(MSG_ACK, sock, &error);
         }
         free(pkt); 
@@ -423,7 +420,7 @@ void network_handler(network_interrupt_arg_t* pkt){
           }
           if (seq_num == sock->curr_ack && data_len > 0 
               && sock->curr_ack == (seq_num - 1)) {
-            queue_enqueue(sock->pkt_q, pkt);
+            queue_append(sock->pkt_q, pkt);
             semaphore_V(sock->pkt_ready_sem);
             minisocket_send_ctrl(MSG_ACK, sock, &error);
           }
@@ -453,7 +450,6 @@ void network_handler(network_interrupt_arg_t* pkt){
       default:
         break;
       }
-      */
     set_interrupt_level(l);
 
   }   
