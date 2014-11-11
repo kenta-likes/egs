@@ -602,8 +602,17 @@ void minisocket_close(minisocket_t socket)
   //(after 7 retries, close connection)
   //P on ack_ready
   //if ack_ready, close connection
+ 
+  //ill formed argument 
+  if (!sock_array){
+    return;
+  }
 
   l = set_interrupt_level(DISABLED);
+  //ill formed argument
+  if (sock_array[socket->src_port] == NULL){
+    return;
+  }
   socket->curr_state = CLOSE_SEND;
   socket->try_count = 0;
 
@@ -623,5 +632,14 @@ void minisocket_close(minisocket_t socket)
 
   semaphore_P(socket->ack_ready_sem); //wait for ack packet...
   //received ack, close connection
+  
+  l = set_interrupt_level(DISABLED);
+  sock_array[socket->src_port] = NULL;
+  minisocket_destroy(socket, &error);
+  if (error != SOCKET_NOERROR){
+    printf("Something went wrong. Close connection failure.\n");
+  }
+  set_interrupt_level(l);
+  return;
 
 }
