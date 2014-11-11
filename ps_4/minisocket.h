@@ -79,7 +79,6 @@ void minisocket_destroy(minisocket_t sock, minisocket_error* error);
  * The address of pkt is given as the data buffer, 
  * but no data from pkt is written since the data_len is 0.
  */ 
-
 void minisocket_send_ctrl(char type, minisocket_t sock, minisocket_error* error);
 
 
