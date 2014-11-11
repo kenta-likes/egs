@@ -44,7 +44,7 @@ unsigned int minisocket_get_ack(minisocket_t sock);
  * The address of pkt is given as the data buffer, 
  * but no data from pkt is written since the data_len is 0.
  */ 
-void minisocket_send_ctrl(char type, minisocket_t sock, minisocket_error* error) {
+void minisocket_send_ctrl(char type, minisocket_t sock, minisocket_error* error);
 
 
 /* Initializes the minisocket layer. */
