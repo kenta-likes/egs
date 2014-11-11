@@ -574,5 +574,7 @@ int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisock
  */
 void minisocket_close(minisocket_t socket)
 {
+  //idea: send close, wait using alarms
+  //after 7 retries, close connection
 
 }

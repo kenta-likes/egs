@@ -12,6 +12,10 @@ If we receive SYN in network handler:
 If we receive MSG_FIN in network handler:
   - if state == CLOSING:
      - send MSG_ACK
+
+
+Closing connections:
+1. close connection function
 If we receive MSG_SYN OR MSG_SYNACK in network handler:
   - if state == CONNECT_WAIT:
     - if MSG_SYNACK:
