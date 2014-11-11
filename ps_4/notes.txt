@@ -27,3 +27,8 @@ If we receive MSG_SYN OR MSG_SYNACK in network handler:
       - V(ack_ready_sem)
     - else:
       - drop
+
+
+
+KENTA's NOTES:
+make sure you don't destroy in receive after 7 retries (ie exit)
