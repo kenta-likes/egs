@@ -300,6 +300,7 @@ network_handler(network_interrupt_arg_t* pkt){
   mini_header_t pkt_hdr;
   char protocol;
   
+  printf("in network_handler\n");
   l = set_interrupt_level(DISABLED);
   pkt_hdr = (mini_header_t)(&pkt->buffer);
   protocol = pkt_hdr->protocol;
@@ -315,6 +316,7 @@ network_handler(network_interrupt_arg_t* pkt){
     return;
   }
   else if (protocol == PROTOCOL_MINISTREAM) {
+    printf("got a tcp packet\n");
     minisocket_process_packet((void*)pkt);
     set_interrupt_level(l);
   }
