@@ -551,10 +551,8 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
   socket->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
   socket->curr_state = MSG_WAIT;
   set_interrupt_level(l);
-  semaphore_P(socket->ack_ready_sem);
-  printf("in send, got my ACK!\n");   
-  i = 1; //set packet num to 1
-  printf("sent %d out of %d packets!\n", i, num_pkt);
+
+
   while (i < num_pkt){
     semaphore_P(socket->ack_ready_sem);
     l = set_interrupt_level(DISABLED);
@@ -575,12 +573,18 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
       set_interrupt_level(l);
       return i*max_size;
     case CONNECTED: 
+      i++;
+      if (i >= num_pkt){ //we sent everything
+        set_interrupt_level(l);
+        break;
+      }
       (socket->curr_seq)++;
       minisocket_send_data(socket,
               i<num_pkt-1? max_size : len-(max_size*i),
               ((char*)msg) + i*max_size,
               error);
-      if (*error != SOCKET_NOERROR){
+
+      if (*error != SOCKET_NOERROR){//TODO:may not need to do this
         set_interrupt_level(l);
         return -1;
       }
@@ -597,7 +601,6 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
       socket->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
       socket->curr_state = MSG_WAIT;
       set_interrupt_level(l);
-      i++;
       break;
     default: // error case, simply return
       *error = SOCKET_SENDERROR;
@@ -676,7 +679,10 @@ void minisocket_close(minisocket_t socket)
   interrupt_level_t l;
   minisocket_error error;
   struct resend_arg resend_alarm_arg;
+  error = SOCKET_NOERROR;
 
+  printf("in minisocket_close\n");
+  
   //set state to close_wait
   //send close, wait using alarms
   //(after 7 retries, close connection)
@@ -697,7 +703,7 @@ void minisocket_close(minisocket_t socket)
   socket->try_count = 0;
 
   minisocket_send_ctrl( MSG_FIN, socket, &error);
-
+  printf("in minisocket_close, sent my MSG_FIN\n");
   resend_alarm_arg.sock = socket;
   resend_alarm_arg.msg_type = MSG_FIN;
   resend_alarm_arg.data_len = 0;
@@ -712,16 +718,24 @@ void minisocket_close(minisocket_t socket)
 
   semaphore_P(socket->ack_ready_sem); //wait for ack packet...
   //received ack, close connection
-  
+  printf("in minisocket_close, got my ACK baby\n");
   l = set_interrupt_level(DISABLED);
+  if (socket->resend_alarm){
+    deregister_alarm(socket->resend_alarm);
+  }
+  socket->resend_alarm = NULL;
+
   sock_array[socket->src_port] = NULL;
+  error = SOCKET_NOERROR;
   minisocket_destroy(socket, &error);
+  printf("Closed. Error is %d", error);
   if (error != SOCKET_NOERROR){
     printf("Something went wrong. Close connection failure.\n");
   }
   set_interrupt_level(l);
 
   semaphore_V(socket->ack_ready_sem); //in case send() is blocked
+  printf("in minisocket_close, SUCCESS\n");
   return;
 
 }

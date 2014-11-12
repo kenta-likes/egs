@@ -58,38 +58,96 @@ char* GetErrorDescription(int errorcode){
 }
 
 int server(int* arg) {
-  minisocket_error error;
+  char buffer[BUFFER_SIZE];
+  int i;
+  int bytes_sent;
   minisocket_t socket;
-  char* msg;
-  int data_len;
-
-  msg = "hello\n";
-  data_len = strlen(msg) + 1;
+  minisocket_error error;
+  
   socket = minisocket_server_create(port,&error);
   printf("made a server\n");
   if (socket==NULL){
     printf("ERROR: %s. Exiting. \n",GetErrorDescription(error));
     return -1;
   }
-  minisocket_send(socket, msg, data_len, &error);
-  printf("sent my thang!\n");
+
+  /* Fill in the buffer with numbers from 0 to BUFFER_SIZE-1 */
+  for (i=0; i<BUFFER_SIZE; i++){
+    buffer[i]=(char)(i%256);
+  }
+
+  /* send the message */
+  bytes_sent=0;
+  while (bytes_sent!=BUFFER_SIZE){
+    int trans_bytes=
+      minisocket_send(socket,buffer+bytes_sent,
+		      BUFFER_SIZE-bytes_sent, &error);
+  
+    printf("Sent %d bytes.\n",trans_bytes);
+
+    if (error!=SOCKET_NOERROR){
+      printf("ERROR: %s. Exiting. \n",GetErrorDescription(error));
+      /* close the connection */
+      minisocket_close(socket);
+    
+      return -1;
+    }   
+
+    bytes_sent+=trans_bytes;
+  }
+
+  /* close the connection */
+  //minisocket_close(socket);
+
   return 0;
 }
 
 int client(int* arg) {
+  char buffer[BUFFER_SIZE];
+  int i;
+  int bytes_received;
   network_address_t address;
   minisocket_t socket;
   minisocket_error error;
-  char msg[strlen("hello\n") + 1]; 
- 
+  
   network_translate_hostname(hostname, address);
   
   /* create a network connection to the local machine */
   socket = minisocket_client_create(address, port,&error);
   printf("made a client\n");
+  if (socket==NULL){
+    printf("ERROR: %s. Exiting. \n",GetErrorDescription(error));
+    return -1;
+  }
 
-  minisocket_receive(socket, msg, strlen("hello\n")+1, &error);
-  printf(msg);
+  /* receive the message */
+  bytes_received=0;
+  while (bytes_received!=BUFFER_SIZE){
+    int received_bytes;
+    if ( (received_bytes=minisocket_receive(socket,buffer,BUFFER_SIZE-bytes_received, &error))==-1){
+      printf("ERROR: %s. Exiting. \n",GetErrorDescription(error));
+      /* close the connection */
+      minisocket_close(socket);
+      return -1;
+    }   
+    /* test the information received */
+    for (i=0; i<received_bytes; i++){
+      if (buffer[i]!=(char)( (bytes_received+i)%256 )){
+	printf("The %d'th byte received is wrong.\n",
+	       bytes_received+i);
+	/* close the connection */
+	minisocket_close(socket);
+	return -1;
+      }
+    }
+	      
+    bytes_received+=received_bytes;
+  }
+
+  printf("All bytes received correctly.\n");
+  
+  minisocket_close(socket);
+
   return 0;
 }
 
