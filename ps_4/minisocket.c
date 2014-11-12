@@ -110,7 +110,7 @@ void minisocket_send_data(minisocket_t sock, unsigned int data_len, char* data, 
 void minisocket_resend(void* arg) {
   int wait_cycles;
   resend_arg_t params = (resend_arg_t)arg;
-  printf("resend called on try %d\n", params->sock->try_count);
+  printf("resend called during state %i on try %d\n", params->sock->curr_state, params->sock->try_count);
   params->sock->try_count++;
   if (params->sock->try_count >= 7) {
     params->sock->resend_alarm = NULL;
@@ -423,6 +423,7 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
   sock_array[curr_client_idx++] = new_sock;
   semaphore_V(client_lock);
  
+  l = set_interrupt_level(DISABLED);
   minisocket_send_ctrl(MSG_SYN, new_sock, error);
   resend_alarm_arg.sock = new_sock;
   resend_alarm_arg.msg_type = MSG_SYN;
@@ -430,19 +431,19 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
   resend_alarm_arg.data = &tmp; //placeholder
   resend_alarm_arg.error = error; 
   new_sock->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
+  set_interrupt_level(l);
 
   semaphore_P(new_sock->ack_ready_sem);
   l = set_interrupt_level(DISABLED);
 
   switch(new_sock->curr_state) {
-  case CONNECT_WAIT: 
+  case CONNECTED: //we are connected
     // must have gotten a MSG_SYNACK
     new_sock->curr_state = CONNECTED;
     new_sock->try_count = 0;
     new_sock->resend_alarm = NULL;
     deregister_alarm(new_sock->resend_alarm);
     *error = SOCKET_NOERROR;
-    minisocket_send_ctrl(MSG_ACK, new_sock, error);
     set_interrupt_level(l); 
     break;
   
