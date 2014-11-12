@@ -279,7 +279,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
   sock_array[port] = new_sock;
   semaphore_V(server_lock);
  
-  while (new_sock->curr_state != CONNECTED) {
+  while (1) {
     // wait for MSG_SYN
     semaphore_P(new_sock->ack_ready_sem);
     l = set_interrupt_level(DISABLED);
@@ -299,15 +299,16 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
       set_interrupt_level(l);
       break;
 
-    case MSG_WAIT:
+    case CONNECTED:
       // must have gotten a MSG_ACK 
-      new_sock->curr_state = CONNECTED;
+      printf("in server_create, SUCCESS!\n");
       new_sock->try_count = 0;
-      new_sock->resend_alarm = NULL;
       deregister_alarm(new_sock->resend_alarm);
+      new_sock->resend_alarm = NULL;
       *error = SOCKET_NOERROR;
-      free(pkt);
       set_interrupt_level(l);
+      printf("exiting server_create\n");
+      return new_sock;
       break;
 
     case EXIT: default:
@@ -442,8 +443,8 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
     // must have gotten a MSG_SYNACK
     new_sock->curr_state = CONNECTED;
     new_sock->try_count = 0;
-    new_sock->resend_alarm = NULL;
     deregister_alarm(new_sock->resend_alarm);
+    new_sock->resend_alarm = NULL;
     *error = SOCKET_NOERROR;
     set_interrupt_level(l); 
     break;
@@ -528,6 +529,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
 
   //try sending
   *error = SOCKET_NOERROR;
+  (socket->curr_seq)++;
   minisocket_send_data(socket,len>max_size ? max_size:len,msg, error);
   if (*error != SOCKET_NOERROR){
     set_interrupt_level(l);
@@ -568,6 +570,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
       set_interrupt_level(l);
       return i*max_size;
     case CONNECTED: 
+      (socket->curr_seq)++;
       minisocket_send_data(socket,
               i<num_pkt-1? max_size : len-(max_size*i),
               ((char*)msg) + i*max_size,
@@ -588,7 +591,6 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
       }
       socket->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
       socket->curr_state = MSG_WAIT;
-      (socket->curr_seq)++;
       set_interrupt_level(l);
       i++;
       break;
@@ -813,11 +815,11 @@ void minisocket_process_packet(void* packet) {
       else if (type == MSG_SYNACK) {
         if (ack_num == sock->curr_seq) {
           sock->curr_state = CONNECTED;
-          minisocket_send_ctrl(MSG_ACK, sock, &error);
           sock->curr_ack++;
+          minisocket_send_ctrl(MSG_ACK, sock, &error);
           semaphore_V(sock->ack_ready_sem);
         }
-        
+      }       
       free(pkt); 
       break;
     
@@ -832,9 +834,12 @@ void minisocket_process_packet(void* packet) {
         }
         if (seq_num == sock->curr_ack+1 && data_len > 0) {
           queue_append(sock->pkt_q, pkt);
-          semaphore_V(sock->pkt_ready_sem);
           minisocket_send_ctrl(MSG_ACK, sock, &error);
           sock->curr_ack++;
+          semaphore_V(sock->pkt_ready_sem);
+        }
+        else {
+          free(pkt);
         }
       }
       else {
@@ -861,17 +866,23 @@ void minisocket_process_packet(void* packet) {
         //minisocket_send_ctrl(MSG_FIN, sock, &error);
       }
       else if (type == MSG_ACK) {
-        if (seq_num == sock->curr_ack + 1) {
+        if (ack_num == sock->curr_seq) {
         semaphore_V(sock->ack_ready_sem);
         sock->curr_state = CONNECTED;
-        sock->curr_ack++;
         }
-        if (seq_num == sock->curr_ack && data_len > 0 
-            && sock->curr_ack == (seq_num - 1)) {
+        if (seq_num == sock->curr_ack+1 && data_len > 0) {
+          printf("got some DATA\n"); 
           queue_append(sock->pkt_q, pkt);
-          semaphore_V(sock->pkt_ready_sem);
           minisocket_send_ctrl(MSG_ACK, sock, &error);
+          sock->curr_ack++;
+          semaphore_V(sock->pkt_ready_sem);
         }
+        else {
+          free(pkt);
+        }
+      }
+      else {
+        free(pkt);
       }
       break;
 
