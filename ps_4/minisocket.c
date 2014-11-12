@@ -5,7 +5,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-/*
+
+typedef enum state {LISTEN = 1, CONNECTING, CONNECT_WAIT, MSG_WAIT, 
+    CLOSE_SEND, CLOSE_RCV, CONNECTED, EXIT} state;
+
+
 struct minisocket
 {
   state curr_state;
@@ -20,7 +24,7 @@ struct minisocket
   unsigned short src_port;
   network_address_t dst_addr;
   unsigned short dst_port;
-};*/
+};
 
 typedef struct resend_arg {
   minisocket_t sock;
@@ -36,17 +40,6 @@ semaphore_t server_lock;
 network_address_t my_addr;
 unsigned int curr_client_idx;
 
-unsigned int minisocket_get_ack(minisocket_t sock) {
-  return sock->curr_ack;
-}
-
-unsigned int minisocket_get_seq(minisocket_t sock) {
-  return sock->curr_seq;
-}
-
-minisocket_t minisocket_get_socket(int port) {
-  return sock_array[port];
-}
 /* minisocket_resend takes in a resend_arg with fields on the socket on which the send,
  * and what to send.
  * This function will be passed in to an alarm to be called later.
@@ -716,3 +709,150 @@ void minisocket_close(minisocket_t socket)
   return;
 
 }
+
+
+/* minisocket_process_packet is called within the network interrupt handler.
+ * Therefore we can safely assume that interrupts are disabled.
+ *
+ */
+void minisocket_process_packet(void* packet) {
+  network_interrupt_arg_t* pkt;
+  mini_header_reliable_t pkt_hdr;
+  unsigned int seq_num;
+  unsigned int ack_num;
+  minisocket_error error;
+  network_address_t src_addr;
+  network_address_t dst_addr;
+  unsigned int src_port;
+  unsigned int dst_port;
+  minisocket_t sock;
+  int type;
+  int data_len;
+
+  pkt = (network_interrupt_arg_t*)packet;
+  pkt_hdr = (mini_header_reliable_t)(&pkt->buffer);
+ 
+
+  // error checking
+  if (pkt->size < sizeof(struct mini_header_reliable)) {
+    free(pkt);
+    return;
+  }
+
+  unpack_address(pkt_hdr->source_address, src_addr);
+  src_port = unpack_unsigned_short(pkt_hdr->source_port);
+  dst_port = unpack_unsigned_short(pkt_hdr->destination_port);
+  unpack_address(pkt_hdr->destination_address, dst_addr);
+  seq_num = unpack_unsigned_int(pkt_hdr->seq_number);
+  ack_num = unpack_unsigned_int(pkt_hdr->ack_number);
+  data_len = pkt->size - sizeof(struct mini_header_reliable);
+  if (src_port < 0 || dst_port < 0 
+        || src_port >= NUM_SOCKETS || dst_port >= NUM_SOCKETS
+        || !network_compare_network_addresses(dst_addr, my_addr)){
+    free(pkt);
+    return;
+  }
+
+  error = SOCKET_NOERROR;
+  sock = sock_array[dst_port];
+  if (sock == NULL) {
+    free(pkt);
+    return;
+  }
+  type = pkt_hdr->message_type;
+  switch (sock->curr_state) {
+    case LISTEN:
+      if (type == MSG_SYN) {
+        sock->curr_ack = 1;
+        semaphore_V(sock->ack_ready_sem);
+        sock->curr_state = CONNECTING;
+        sock->dst_port = src_port;
+        network_address_copy(src_addr, sock->dst_addr);
+      }
+      free(pkt);
+      break;
+    
+    case CONNECTING:
+      if (type == MSG_SYN) {
+        minisocket_send_ctrl(MSG_FIN, sock, &error);
+      } 
+      else if (type == MSG_ACK) {
+        if (seq_num == sock->curr_ack + 1) {
+          semaphore_V(sock->ack_ready_sem);
+          sock->curr_state = CONNECTED;
+          sock->curr_ack++;
+        }
+        if (seq_num == sock->curr_ack && data_len > 0 
+            && sock->curr_ack == (seq_num - 1)) {
+          queue_append(sock->pkt_q, pkt);
+          semaphore_V(sock->pkt_ready_sem);
+          minisocket_send_ctrl(MSG_ACK, sock, &error);
+        }
+      }
+      else {
+        free(pkt);
+      }
+      break;
+    
+    case CONNECT_WAIT:
+      if (type == MSG_SYN) {
+        minisocket_send_ctrl(MSG_FIN, sock, &error);
+      }
+      else if (type == MSG_FIN) {
+        sock->curr_state = CLOSE_RCV;
+      }
+      else if (type == MSG_SYNACK) {
+        sock->curr_state = CONNECTED;
+        minisocket_send_ctrl(MSG_ACK, sock, &error);
+      }
+      free(pkt); 
+      break;
+    
+    case MSG_WAIT:
+      if (type == MSG_SYN) {
+        minisocket_send_ctrl(MSG_FIN, sock, &error);
+      } 
+      else if (type == MSG_ACK) {
+        if (seq_num == sock->curr_ack + 1) {
+        semaphore_V(sock->ack_ready_sem);
+        sock->curr_state = CONNECTED;
+        sock->curr_ack++;
+        }
+        if (seq_num == sock->curr_ack && data_len > 0 
+            && sock->curr_ack == (seq_num - 1)) {
+          queue_append(sock->pkt_q, pkt);
+          semaphore_V(sock->pkt_ready_sem);
+          minisocket_send_ctrl(MSG_ACK, sock, &error);
+        }
+      }
+      else {
+        free(pkt);
+      }        
+      break;
+
+    case CLOSE_SEND:
+      if (type == MSG_SYN) {
+        minisocket_send_ctrl(MSG_FIN, sock, &error);
+      }
+      free(pkt);
+      break;
+
+    case CLOSE_RCV:
+      if (type == MSG_SYN) {
+        minisocket_send_ctrl(MSG_FIN, sock, &error);
+      }
+      free(pkt);
+      break;
+
+    case CONNECTED:
+      if (type == MSG_SYN) {
+        minisocket_send_ctrl(MSG_FIN, sock, &error);
+      }
+      break;
+
+    case EXIT: default:
+      free(pkt);
+      break;
+    }
+}
+

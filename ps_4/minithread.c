@@ -294,23 +294,14 @@ clock_handler(void* arg) {
  *  Puts packet onto pkt_q to be processed later by process_packets
  *  thread.
  */
-void network_handler(network_interrupt_arg_t* pkt){
+void 
+network_handler(network_interrupt_arg_t* pkt){
   interrupt_level_t l;
-  mini_header_reliable_t pkt_hdr;
+  mini_header_t pkt_hdr;
   char protocol;
-  unsigned int seq_num;
-  unsigned int ack_num;
-  minisocket_error error;
-  network_address_t src_addr;
-  network_address_t dst_addr;
-  unsigned int src_port;
-  unsigned int dst_port;
-  minisocket_t sock;
-  int type;
-  int data_len;
-
+  
   l = set_interrupt_level(DISABLED);
-  pkt_hdr = (mini_header_reliable_t)(&pkt->buffer);
+  pkt_hdr = (mini_header_t)(&pkt->buffer);
   protocol = pkt_hdr->protocol;
  
   if (protocol == PROTOCOL_MINIDATAGRAM) {
@@ -324,134 +315,12 @@ void network_handler(network_interrupt_arg_t* pkt){
     return;
   }
   else if (protocol == PROTOCOL_MINISTREAM) {
-    // error checking
-    if (pkt->size < sizeof(struct mini_header_reliable)) {
-      free(pkt);
-      set_interrupt_level(l);
-      return;
-    }
-    if (protocol != PROTOCOL_MINISTREAM  ){
-      free(pkt);
-      set_interrupt_level(l);
-      return;
-    }
-
-    unpack_address(pkt_hdr->source_address, src_addr);
-    src_port = unpack_unsigned_short(pkt_hdr->source_port);
-    dst_port = unpack_unsigned_short(pkt_hdr->destination_port);
-    unpack_address(pkt_hdr->destination_address, dst_addr);
-    seq_num = unpack_unsigned_int(pkt_hdr->seq_number);
-    ack_num = unpack_unsigned_int(pkt_hdr->ack_number);
-    data_len = pkt->size - sizeof(struct mini_header_reliable);
-    if (src_port < 0 || dst_port < 0 
-          || src_port >= NUM_SOCKETS || dst_port >= NUM_SOCKETS
-          || !network_compare_network_addresses(dst_addr, my_addr) ){
-      free(pkt);
-      set_interrupt_level(l);
-      return;
-    }
-
-    error = SOCKET_NOERROR;
-    sock = minisocket_get_socket(dst_port);
-    if (sock == NULL) {
-      free(pkt);
-      set_interrupt_level(l);
-      return;
-    }
-    type = pkt_hdr->message_type;
-    switch (sock->curr_state) {
-      case LISTEN:
-        if (type == MSG_SYN) {
-          sock->curr_ack = 1;
-          semaphore_V(sock->ack_ready_sem);
-          sock->curr_state = CONNECTING;
-          sock->dst_port = src_port;
-          network_address_copy(src_addr, sock->dst_addr);
-        }
-        free(pkt);
-        break;
-      
-      case CONNECTING:
-        if (type == MSG_SYN) {
-          minisocket_send_ctrl(MSG_FIN, sock, &error);
-        } 
-        else if (type == MSG_ACK) {
-          if (seq_num == sock->curr_ack + 1) {
-            semaphore_V(sock->ack_ready_sem);
-            sock->curr_state = CONNECTED;
-            sock->curr_ack++;
-          }
-          if (seq_num == sock->curr_ack && data_len > 0 
-              && sock->curr_ack == (seq_num - 1)) {
-            queue_append(sock->pkt_q, pkt);
-            semaphore_V(sock->pkt_ready_sem);
-            minisocket_send_ctrl(MSG_ACK, sock, &error);
-          }
-        }
-        else {
-          free(pkt);
-        }
-        break;
-      
-      case CONNECT_WAIT:
-        if (type == MSG_SYN) {
-          minisocket_send_ctrl(MSG_FIN, sock, &error);
-        }
-        else if (type == MSG_FIN) {
-          sock->curr_state = CLOSE_RCV;
-        }
-        else if (type == MSG_SYNACK) {
-          sock->curr_state = CONNECTED;
-          minisocket_send_ctrl(MSG_ACK, sock, &error);
-        }
-        free(pkt); 
-        break;
-      
-//enum { MSG_SYN = 1, MSG_SYNACK, MSG_ACK, MSG_FIN };
-      case MSG_WAIT:
-        if (type == MSG_SYN) {
-          minisocket_send_ctrl(MSG_FIN, sock, &error);
-        } 
-        else if (type == MSG_ACK) {
-          if (seq_num == sock->curr_ack + 1) {
-          semaphore_V(sock->ack_ready_sem);
-          sock->curr_state = CONNECTED;
-          sock->curr_ack++;
-          }
-          if (seq_num == sock->curr_ack && data_len > 0 
-              && sock->curr_ack == (seq_num - 1)) {
-            queue_append(sock->pkt_q, pkt);
-            semaphore_V(sock->pkt_ready_sem);
-            minisocket_send_ctrl(MSG_ACK, sock, &error);
-          }
-        }        
-        break;
-
-      case CLOSE_SEND:
-        if (type == MSG_SYN) {
-          minisocket_send_ctrl(MSG_FIN, sock, &error);
-        }
-        break;
-
-      case CLOSE_RCV:
-        if (type == MSG_SYN) {
-          minisocket_send_ctrl(MSG_FIN, sock, &error);
-        }
-        break;
-
-      case CONNECTED:
-        if (type == MSG_SYN) {
-          minisocket_send_ctrl(MSG_FIN, sock, &error);
-        }
-        break;
-
-      case EXIT: 
-        break;
-      default:
-        break;
-      }
+    minisocket_process_packet((void*)pkt);
     set_interrupt_level(l);
-
+  }
+  else {
+    free(pkt);
+    set_interrupt_level(l);
   }   
 }
 
@@ -517,6 +386,7 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
     clean_up_thread->priority,clean_up_thread);
   runnable_count++;
   minimsg_initialize();
+  minisocket_initialize();
   process_packets_thread =  minithread_create(process_packets, NULL);
   multilevel_queue_enqueue(runnable_q,
     process_packets_thread->priority,process_packets_thread);

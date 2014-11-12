@@ -65,8 +65,10 @@ int transmit(int* arg) {
 
   minithread_fork(receive, NULL);
   // receiver = minithread_fork(receive, NULL);
-
+  
+  printf("in transmit\n");
   socket = minisocket_server_create(port,&error);
+  printf("created a server\n");
   if (socket==NULL){
     printf("ERROR: %s. Exiting. \n",GetErrorDescription(error));
     return -1;
@@ -120,9 +122,10 @@ int receive(int* arg) {
   minithread_yield();
   
   network_get_my_address(my_address);
-  
+  printf("in receive\n");
   /* create a network connection to the local machine */
   socket = minisocket_client_create(my_address, port,&error);
+  printf("created a client\n");
   if (socket==NULL){
     printf("ERROR: %s. Exiting. \n",GetErrorDescription(error));
     return -1;
