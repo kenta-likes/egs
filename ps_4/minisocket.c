@@ -498,12 +498,14 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
   struct resend_arg resend_alarm_arg;
   unsigned int max_size;
 
+  printf("in minisocket_send\n");
   //max size for PAYLOAD, not entire packet
   max_size = MAX_NETWORK_PKT_SIZE - sizeof(struct mini_header_reliable);
   num_pkt = len / max_size + 1; //number of divided packets
-
+  printf("gonna send %d packet(s)!\n", num_pkt);
   //error checking
-  if (!socket || sock_array[socket->src_port] == NULL || msg == NULL || len < 0)
+  if (!socket || sock_array[socket->src_port] == NULL || msg == NULL 
+      || len < 0)
   {
     *error = SOCKET_INVALIDPARAMS;
     return -1;
@@ -512,8 +514,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
   if (len == 0){
     return 0;
   }
-  
-
+ 
   //check for invalid cases
   l = set_interrupt_level(DISABLED);
   if (socket->curr_state != CONNECTED){
@@ -531,6 +532,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
   *error = SOCKET_NOERROR;
   (socket->curr_seq)++;
   minisocket_send_data(socket,len>max_size ? max_size:len,msg, error);
+  printf("sent first packet!\n");
   if (*error != SOCKET_NOERROR){
     set_interrupt_level(l);
     return -1;
@@ -547,9 +549,12 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
     socket->resend_alarm = NULL;
   }
   socket->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
+  socket->curr_state = MSG_WAIT;
   set_interrupt_level(l);
-   
-  i = 0; //set packet num to 1
+  semaphore_P(socket->ack_ready_sem);
+  printf("in send, got my ACK!\n");   
+  i = 1; //set packet num to 1
+  printf("sent %d out of %d packets!\n", i, num_pkt);
   while (i < num_pkt){
     semaphore_P(socket->ack_ready_sem);
     l = set_interrupt_level(DISABLED);
@@ -585,7 +590,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
       resend_alarm_arg.data_len = i<num_pkt-1? max_size : len-(max_size*i);
       resend_alarm_arg.data = ((char*)msg) + i*max_size;
       resend_alarm_arg.error = error;
-      if (socket->resend_alarm){
+      if (socket->resend_alarm) {
         deregister_alarm(socket->resend_alarm);
         socket->resend_alarm = NULL;
       }
@@ -602,6 +607,8 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
   }
   //we sent all the packets!
   *error = SOCKET_NOERROR;
+  printf("return on send SUCCESS!\n");
+  printf("exiting send with socket at state %d\n", socket->curr_state);
   return len;
 }
 
@@ -621,10 +628,11 @@ int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisock
   char* data;
   int data_len;
   interrupt_level_t l;
-
+  
+  printf("in receive!\n");
   semaphore_P(socket->sock_lock);
   semaphore_P(socket->pkt_ready_sem);
-  
+
   l = set_interrupt_level(DISABLED);
   if (queue_dequeue(socket->pkt_q, (void**)&pkt) == -1) {
     *error = SOCKET_SENDERROR;
@@ -633,9 +641,11 @@ int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisock
     return -1;
   }
 
+  printf("got my packet yo!\n");
   if (socket->curr_state == CONNECTED || socket->curr_state == MSG_WAIT) {
     data = (char*)(pkt->buffer) + sizeof(struct mini_header_reliable);
     data_len = pkt->size - sizeof(struct mini_header_reliable);
+    printf("my data has len %d\n", data_len);
     if (data_len > max_len) {
       data_len = max_len;
     }
@@ -644,10 +654,12 @@ int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisock
     *error = SOCKET_NOERROR; 
     semaphore_V(socket->sock_lock);
     set_interrupt_level(l);
+    printf("got my data...VICTORY!\n");
     return data_len;
   }
   else {
     free(pkt);
+    *error = SOCKET_RECEIVEERROR;
     semaphore_V(socket->sock_lock);
     set_interrupt_level(l);
     return -1;
@@ -829,13 +841,15 @@ void minisocket_process_packet(void* packet) {
       } 
       else if (type == MSG_ACK) {
         if (ack_num == sock->curr_seq) {
-        semaphore_V(sock->ack_ready_sem);
-        sock->curr_state = CONNECTED;
+          printf("got an ACK!\n");
+          semaphore_V(sock->ack_ready_sem);
+          sock->curr_state = CONNECTED;
         }
         if (seq_num == sock->curr_ack+1 && data_len > 0) {
+          printf("got a MESSAGE!\n");
           queue_append(sock->pkt_q, pkt);
-          minisocket_send_ctrl(MSG_ACK, sock, &error);
           sock->curr_ack++;
+          minisocket_send_ctrl(MSG_ACK, sock, &error);
           semaphore_V(sock->pkt_ready_sem);
         }
         else {
@@ -867,15 +881,16 @@ void minisocket_process_packet(void* packet) {
       }
       else if (type == MSG_ACK) {
         if (ack_num == sock->curr_seq) {
-        semaphore_V(sock->ack_ready_sem);
-        sock->curr_state = CONNECTED;
+          semaphore_V(sock->ack_ready_sem);
+          sock->curr_state = CONNECTED;
         }
         if (seq_num == sock->curr_ack+1 && data_len > 0) {
           printf("got some DATA\n"); 
           queue_append(sock->pkt_q, pkt);
-          minisocket_send_ctrl(MSG_ACK, sock, &error);
           sock->curr_ack++;
+          minisocket_send_ctrl(MSG_ACK, sock, &error);
           semaphore_V(sock->pkt_ready_sem);
+          printf("got data, no seg fault\n");
         }
         else {
           free(pkt);

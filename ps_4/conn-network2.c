@@ -63,7 +63,7 @@ int server(int* arg) {
   char* msg;
   int data_len;
 
-  msg = "hello";
+  msg = "hello\n";
   data_len = strlen(msg) + 1;
   socket = minisocket_server_create(port,&error);
   printf("made a server\n");
@@ -72,7 +72,7 @@ int server(int* arg) {
     return -1;
   }
   minisocket_send(socket, msg, data_len, &error);
-
+  printf("sent my thang!\n");
   return 0;
 }
 
@@ -80,7 +80,7 @@ int client(int* arg) {
   network_address_t address;
   minisocket_t socket;
   minisocket_error error;
-  char msg[strlen("hello") + 1]; 
+  char msg[strlen("hello\n") + 1]; 
  
   network_translate_hostname(hostname, address);
   
@@ -88,7 +88,8 @@ int client(int* arg) {
   socket = minisocket_client_create(address, port,&error);
   printf("made a client\n");
 
-  minisocket_receive(socket, msg, strlen("hello")+1, &error);
+  minisocket_receive(socket, msg, strlen("hello\n")+1, &error);
+  printf(msg);
   return 0;
 }
 
