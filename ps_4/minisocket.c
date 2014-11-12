@@ -168,6 +168,7 @@ void minisocket_initialize()
   semaphore_initialize(server_lock, 1);
   network_get_my_address(my_addr);
   curr_client_idx = CLIENT_START;
+  printf("minisocket_initialize complete\n");
 }
 
 void minisocket_destroy(minisocket_t sock, minisocket_error* error){
@@ -733,7 +734,7 @@ void minisocket_process_packet(void* packet) {
   pkt = (network_interrupt_arg_t*)packet;
   pkt_hdr = (mini_header_reliable_t)(&pkt->buffer);
  
-
+  printf("in minisocket_process_packet\n");
   // error checking
   if (pkt->size < sizeof(struct mini_header_reliable)) {
     free(pkt);
@@ -760,7 +761,15 @@ void minisocket_process_packet(void* packet) {
     free(pkt);
     return;
   }
+
   type = pkt_hdr->message_type;
+  printf("socket %d with state %d\n", sock->src_port, sock->curr_state);
+  printf("pkt ack number is %d\n", ack_num);
+  printf("pkt seq number is %d\n", seq_num);
+  printf("my ack number is %d\n", sock->curr_ack);
+  printf("my seq number is %d\n", sock->curr_seq);
+  printf("type of msg received is %d\n", type);
+
   switch (sock->curr_state) {
     case LISTEN:
       if (type == MSG_SYN) {
@@ -775,19 +784,18 @@ void minisocket_process_packet(void* packet) {
     
     case CONNECTING:
       if (type == MSG_SYN) {
-        minisocket_send_ctrl(MSG_FIN, sock, &error);
+        //minisocket_send_ctrl(MSG_FIN, sock, &error);
       } 
       else if (type == MSG_ACK) {
-        if (seq_num == sock->curr_ack + 1) {
-          semaphore_V(sock->ack_ready_sem);
-          sock->curr_state = CONNECTED;
-          sock->curr_ack++;
+        if (ack_num == sock->curr_seq) {
+        semaphore_V(sock->ack_ready_sem);
+        sock->curr_state = CONNECTED;
         }
-        if (seq_num == sock->curr_ack && data_len > 0 
-            && sock->curr_ack == (seq_num - 1)) {
+        if (seq_num == sock->curr_ack+1 && data_len > 0) {
           queue_append(sock->pkt_q, pkt);
           semaphore_V(sock->pkt_ready_sem);
           minisocket_send_ctrl(MSG_ACK, sock, &error);
+          sock->curr_ack++;
         }
       }
       else {
@@ -797,33 +805,36 @@ void minisocket_process_packet(void* packet) {
     
     case CONNECT_WAIT:
       if (type == MSG_SYN) {
-        minisocket_send_ctrl(MSG_FIN, sock, &error);
+        //minisocket_send_ctrl(MSG_FIN, sock, &error);
       }
       else if (type == MSG_FIN) {
         sock->curr_state = CLOSE_RCV;
       }
       else if (type == MSG_SYNACK) {
-        sock->curr_state = CONNECTED;
-        minisocket_send_ctrl(MSG_ACK, sock, &error);
-      }
+        if (ack_num == sock->curr_seq) {
+          sock->curr_state = CONNECTED;
+          minisocket_send_ctrl(MSG_ACK, sock, &error);
+          sock->curr_ack++;
+          semaphore_V(sock->ack_ready_sem);
+        }
+        
       free(pkt); 
       break;
     
     case MSG_WAIT:
       if (type == MSG_SYN) {
-        minisocket_send_ctrl(MSG_FIN, sock, &error);
+        //minisocket_send_ctrl(MSG_FIN, sock, &error);
       } 
       else if (type == MSG_ACK) {
-        if (seq_num == sock->curr_ack + 1) {
+        if (ack_num == sock->curr_seq) {
         semaphore_V(sock->ack_ready_sem);
         sock->curr_state = CONNECTED;
-        sock->curr_ack++;
         }
-        if (seq_num == sock->curr_ack && data_len > 0 
-            && sock->curr_ack == (seq_num - 1)) {
+        if (seq_num == sock->curr_ack+1 && data_len > 0) {
           queue_append(sock->pkt_q, pkt);
           semaphore_V(sock->pkt_ready_sem);
           minisocket_send_ctrl(MSG_ACK, sock, &error);
+          sock->curr_ack++;
         }
       }
       else {
@@ -833,7 +844,7 @@ void minisocket_process_packet(void* packet) {
 
     case CLOSE_SEND:
       if (type == MSG_SYN) {
-        minisocket_send_ctrl(MSG_FIN, sock, &error);
+        //minisocket_send_ctrl(MSG_FIN, sock, &error);
       }
       free(pkt);
       break;
@@ -847,7 +858,20 @@ void minisocket_process_packet(void* packet) {
 
     case CONNECTED:
       if (type == MSG_SYN) {
-        minisocket_send_ctrl(MSG_FIN, sock, &error);
+        //minisocket_send_ctrl(MSG_FIN, sock, &error);
+      }
+      else if (type == MSG_ACK) {
+        if (seq_num == sock->curr_ack + 1) {
+        semaphore_V(sock->ack_ready_sem);
+        sock->curr_state = CONNECTED;
+        sock->curr_ack++;
+        }
+        if (seq_num == sock->curr_ack && data_len > 0 
+            && sock->curr_ack == (seq_num - 1)) {
+          queue_append(sock->pkt_q, pkt);
+          semaphore_V(sock->pkt_ready_sem);
+          minisocket_send_ctrl(MSG_ACK, sock, &error);
+        }
       }
       break;
 
