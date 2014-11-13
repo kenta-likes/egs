@@ -1,0 +1,212 @@
+minisocket_initialize complete
+in network_handler
+got a tcp packet
+in minisocket_process_packet
+socket 32768 with state 3
+pkt ack number is 1
+pkt seq number is 1
+my ack number is 0
+my seq number is 1
+type of msg received is 2
+made a client
+in receive!
+in network_handler
+got a tcp packet
+in minisocket_process_packet
+socket 32768 with state 7
+pkt ack number is 1
+pkt seq number is 2
+my ack number is 1
+my seq number is 1
+type of msg received is 3
+got some DATA
+got data, no seg fault
+got my packet yo!
+my data has len 8162
+got my data...VICTORY!
+in receive!
+in network_handler
+got a tcp packet
+in minisocket_process_packet
+socket 32768 with state 7
+pkt ack number is 1
+pkt seq number is 3
+my ack number is 2
+my seq number is 1
+type of msg received is 3
+got some DATA
+got data, no seg fault
+got my packet yo!
+my data has len 8162
+got my data...VICTORY!
+in receive!
+in network_handler
+got a tcp packet
+in minisocket_process_packet
+socket 32768 with state 7
+pkt ack number is 1
+pkt seq number is 4
+my ack number is 3
+my seq number is 1
+type of msg received is 3
+got some DATA
+got data, no seg fault
+got my packet yo!
+my data has len 8162
+got my data...VICTORY!
+in receive!
+in network_handler
+got a tcp packet
+in minisocket_process_packet
+socket 32768 with state 7
+pkt ack number is 1
+pkt seq number is 5
+my ack number is 4
+my seq number is 1
+type of msg received is 3
+got some DATA
+got data, no seg fault
+got my packet yo!
+my data has len 8162
+got my data...VICTORY!
+in receive!
+in network_handler
+got a tcp packet
+in minisocket_process_packet
+socket 32768 with state 7
+pkt ack number is 1
+pkt seq number is 6
+my ack number is 5
+my seq number is 1
+type of msg received is 3
+got some DATA
+got data, no seg fault
+got my packet yo!
+my data has len 8162
+got my data...VICTORY!
+in receive!
+in network_handler
+got a tcp packet
+in minisocket_process_packet
+socket 32768 with state 7
+pkt ack number is 1
+pkt seq number is 7
+my ack number is 6
+my seq number is 1
+type of msg received is 3
+got some DATA
+got data, no seg fault
+got my packet yo!
+my data has len 8162
+got my data...VICTORY!
+in receive!
+in network_handler
+got a tcp packet
+in minisocket_process_packet
+socket 32768 with state 7
+pkt ack number is 1
+pkt seq number is 8
+my ack number is 7
+my seq number is 1
+type of msg received is 3
+got some DATA
+got data, no seg fault
+got my packet yo!
+my data has len 8162
+got my data...VICTORY!
+in receive!
+in network_handler
+got a tcp packet
+in minisocket_process_packet
+socket 32768 with state 7
+pkt ack number is 1
+pkt seq number is 9
+my ack number is 8
+my seq number is 1
+type of msg received is 3
+got some DATA
+got data, no seg fault
+got my packet yo!
+my data has len 8162
+got my data...VICTORY!
+in receive!
+in network_handler
+got a tcp packet
+in minisocket_process_packet
+socket 32768 with state 7
+pkt ack number is 1
+pkt seq number is 10
+my ack number is 9
+my seq number is 1
+type of msg received is 3
+got some DATA
+got data, no seg fault
+got my packet yo!
+my data has len 8162
+got my data...VICTORY!
+in receive!
+in network_handler
+got a tcp packet
+in minisocket_process_packet
+socket 32768 with state 7
+pkt ack number is 1
+pkt seq number is 11
+my ack number is 10
+my seq number is 1
+type of msg received is 3
+got some DATA
+got data, no seg fault
+got my packet yo!
+my data has len 8162
+got my data...VICTORY!
+in receive!
+in network_handler
+got a tcp packet
+in minisocket_process_packet
+socket 32768 with state 7
+pkt ack number is 1
+pkt seq number is 12
+my ack number is 11
+my seq number is 1
+type of msg received is 3
+got some DATA
+got data, no seg fault
+got my packet yo!
+my data has len 8162
+got my data...VICTORY!
+in receive!
+in network_handler
+got a tcp packet
+in minisocket_process_packet
+socket 32768 with state 7
+pkt ack number is 1
+pkt seq number is 13
+my ack number is 12
+my seq number is 1
+type of msg received is 3
+got some DATA
+got data, no seg fault
+got my packet yo!
+my data has len 8162
+got my data...VICTORY!
+in receive!
+in network_handler
+got a tcp packet
+in minisocket_process_packet
+socket 32768 with state 7
+pkt ack number is 1
+pkt seq number is 14
+my ack number is 13
+my seq number is 1
+type of msg received is 3
+got some DATA
+got data, no seg fault
+got my packet yo!
+my data has len 2056
+got my data...VICTORY!
+All bytes received correctly.
+in minisocket_close
+in minisocket_close, sent my MSG_FIN
+in minisocket_close, got my ACK baby
+Closed. Error is 5Something went wrong. Close connection failure.
+in minisocket_close, SUCCESS

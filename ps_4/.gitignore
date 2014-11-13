@@ -14,6 +14,11 @@ conn-network1
 conn-network2
 conn-network3
 conn-network4
+conn-network5
+conn-network6
+conn-network7
+conn-network8
+conn-network9
 network1
 network2
 network3
@@ -52,6 +57,11 @@ conn-network1.o
 conn-network2.o
 conn-network3.o
 conn-network4.o
+conn-network5.o
+conn-network6.o
+conn-network7.o
+conn-network8.o
+conn-network9.o
 shop.o
 alarm.o
 alarmtest1.o
