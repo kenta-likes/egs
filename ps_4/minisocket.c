@@ -697,10 +697,16 @@ void minisocket_close(minisocket_t socket)
   l = set_interrupt_level(DISABLED);
   //ill formed argument
   if (sock_array[socket->src_port] == NULL){
+    set_interrupt_level(l);
+    return;
+  }
+  if (socket->curr_state == CLOSE_SEND || socket->curr_state == CLOSE_RCV){
+    set_interrupt_level(l);
     return;
   }
   socket->curr_state = CLOSE_SEND;
   socket->try_count = 0;
+  socket->curr_seq++;
 
   minisocket_send_ctrl( MSG_FIN, socket, &error);
   printf("in minisocket_close, sent my MSG_FIN\n");
@@ -734,7 +740,7 @@ void minisocket_close(minisocket_t socket)
   }
   set_interrupt_level(l);
 
-  semaphore_V(socket->ack_ready_sem); //in case send() is blocked
+  //semaphore_V(socket->ack_ready_sem); //in case send() is blocked
   printf("in minisocket_close, SUCCESS\n");
   return;
 
@@ -798,6 +804,16 @@ void minisocket_process_packet(void* packet) {
   printf("my seq number is %d\n", sock->curr_seq);
   printf("type of msg received is %d\n", type);
 
+  if (sock->curr_state != LISTEN &&
+        ( !network_compare_network_addresses(src_addr, sock->dst_addr)
+            || src_port != sock->dst_port ) ){
+    if (type == MSG_SYN){
+      minisocket_send_ctrl(MSG_FIN, sock, &error);
+    }
+    free(pkt);
+    return;
+  }
+
   switch (sock->curr_state) {
     case LISTEN:
       if (type == MSG_SYN) {
@@ -811,10 +827,7 @@ void minisocket_process_packet(void* packet) {
       break;
     
     case CONNECTING:
-      if (type == MSG_SYN) {
-        //minisocket_send_ctrl(MSG_FIN, sock, &error);
-      } 
-      else if (type == MSG_ACK) {
+      if (type == MSG_ACK) {
         if (ack_num == sock->curr_seq) {
         semaphore_V(sock->ack_ready_sem);
         sock->curr_state = CONNECTED;
@@ -825,17 +838,17 @@ void minisocket_process_packet(void* packet) {
           minisocket_send_ctrl(MSG_ACK, sock, &error);
           sock->curr_ack++;
         }
+        else {
+          free(pkt);
+        }
       }
       else {
         free(pkt);
       }
       break;
     
-    case CONNECT_WAIT:
-      if (type == MSG_SYN) {
-        //minisocket_send_ctrl(MSG_FIN, sock, &error);
-      }
-      else if (type == MSG_FIN) {
+    case CONNECT_WAIT://TODO
+      if (type == MSG_FIN) {
         sock->curr_state = CLOSE_RCV;
       }
       else if (type == MSG_SYNACK) {
@@ -850,10 +863,7 @@ void minisocket_process_packet(void* packet) {
       break;
     
     case MSG_WAIT:
-      if (type == MSG_SYN) {
-        //minisocket_send_ctrl(MSG_FIN, sock, &error);
-      } 
-      else if (type == MSG_ACK) {
+      if (type == MSG_ACK) {
         if (ack_num == sock->curr_seq) {
           printf("got an ACK!\n");
           semaphore_V(sock->ack_ready_sem);
@@ -876,24 +886,25 @@ void minisocket_process_packet(void* packet) {
       break;
 
     case CLOSE_SEND:
-      if (type == MSG_SYN) {
-        //minisocket_send_ctrl(MSG_FIN, sock, &error);
+      if (type == MSG_ACK && ack_num == sock->curr_seq) {
+          semaphore_V(sock->ack_ready_sem);
       }
       free(pkt);
       break;
 
     case CLOSE_RCV:
-      if (type == MSG_SYN) {
-        minisocket_send_ctrl(MSG_FIN, sock, &error);
+      if (type == MSG_FIN && ack_num == sock->curr_seq) {
+        minisocket_send_ctrl(MSG_ACK, sock, &error);
+        semaphore_V(sock->ack_ready_sem);
       }
       free(pkt);
       break;
 
     case CONNECTED:
-      if (type == MSG_SYN) {
-        //minisocket_send_ctrl(MSG_FIN, sock, &error);
+      if (type == MSG_FIN){
+        printf("YARRRRRR\n");
       }
-      else if (type == MSG_ACK) {
+      if (type == MSG_ACK) {
         if (ack_num == sock->curr_seq) {
           semaphore_V(sock->ack_ready_sem);
           sock->curr_state = CONNECTED;
