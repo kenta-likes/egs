@@ -40,6 +40,10 @@ semaphore_t server_lock;
 network_address_t my_addr;
 unsigned int curr_client_idx;
 
+
+//self destruct function
+void self_destruct(void* arg);
+
 /* minisocket_resend takes in a resend_arg with fields on the socket on which the send,
  * and what to send.
  * This function will be passed in to an alarm to be called later.
@@ -99,6 +103,8 @@ void minisocket_send_data(minisocket_t sock, unsigned int data_len, char* data, 
   }
 }
 
+
+
 /* minisocket_resend takes in a resend_arg with fields on the socket on which the send,
  * and what to send.
  * This function will be passed in to an alarm to be called later.
@@ -116,12 +122,12 @@ void minisocket_resend(void* arg) {
     params->sock->resend_alarm = NULL;
     params->sock->curr_state = EXIT;
     params->sock->try_count = 0;
-    semaphore_V(params->sock->pkt_ready_sem);//notify to unblock
-    semaphore_V(params->sock->ack_ready_sem);//notify to unblock sender
-    semaphore_V(params->sock->ack_ready_sem);//notify to unblock close
+    semaphore_V(params->sock->ack_ready_sem);//notify to unblock
+    //semaphore_V(params->sock->ack_ready_sem);//notify to unblock sender
+    //semaphore_V(params->sock->ack_ready_sem);//notify to unblock close
     return; 
   }
-  
+  printf("in resend_alarm, still have tries left.\n"); 
   wait_cycles = (1 << params->sock->try_count) * RESEND_TIME_UNIT;
   switch (params->msg_type) {
   case MSG_SYN:
@@ -140,18 +146,23 @@ void minisocket_resend(void* arg) {
     // error
     return;
   }
+  printf("Failing right after here?\n");
   params->sock->resend_alarm = set_alarm(wait_cycles, 
       minisocket_resend, arg, minithread_time());
-
+  printf("exit resend. No seg fault here. Try %d\n", params->sock->try_count);
 }
 
 
 /* Initializes the minisocket layer. */
 void minisocket_initialize()
 {
+  int i;
   sock_array = (minisocket_t*)malloc(sizeof(struct minisocket)*NUM_SOCKETS);
   if (!sock_array) {
     return;
+  }
+  for (i = 0; i < NUM_SOCKETS; i++) {
+    sock_array[i] = NULL;
   }
   client_lock = semaphore_create();
   if (!client_lock) {
@@ -177,7 +188,7 @@ void minisocket_destroy(minisocket_t sock, minisocket_error* error){
   semaphore_P(server_lock);
   sock_array[sock->src_port] = NULL;
   semaphore_V(server_lock);
-  *error = SOCKET_SENDERROR;
+  *error = SOCKET_NOERROR;
   //free all queued packets. interrupts not disabled
   //because socket in array set to null, network
   //handler cannot access queue
@@ -191,6 +202,12 @@ void minisocket_destroy(minisocket_t sock, minisocket_error* error){
   free(sock);
 }
 
+void self_destruct(void* arg) {
+  minisocket_error error;
+  minisocket_destroy((minisocket_t)arg, &error);
+  printf("Goodby cruel world\n");
+  return;
+}
 
 /* Listen for a connection from somebody else. When communication link is
  * created return a minisocket_t through which the communication can be made
@@ -219,6 +236,8 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
   //check port in use
   semaphore_P(server_lock);
 
+  printf("calling server_create at port %d.\n", port);
+  printf("value at port %d is %li.\n", port, (long)sock_array[port]);
   if (sock_array[port] != NULL){
     *error = SOCKET_PORTINUSE;
     return NULL;
@@ -422,7 +441,7 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
   new_sock->dst_port = port; 
   network_address_copy(addr, new_sock->dst_addr);
 
-  sock_array[curr_client_idx++] = new_sock;
+  sock_array[curr_client_idx] = new_sock;
   semaphore_V(client_lock);
  
   l = set_interrupt_level(DISABLED);
@@ -568,10 +587,6 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
       *error = SOCKET_SENDERROR;
       set_interrupt_level(l);
       return i * max_size;
-    case EXIT: //closing connection
-      *error = SOCKET_SENDERROR;
-      set_interrupt_level(l);
-      return i*max_size;
     case CONNECTED: 
       i++;
       if (i >= num_pkt){ //we sent everything
@@ -718,8 +733,9 @@ void minisocket_close(minisocket_t socket)
   if (socket->resend_alarm){
     deregister_alarm(socket->resend_alarm);
   }
+  socket->resend_alarm = NULL;
   socket->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
-
+  printf("in minisocket_close, set my alarm.\n");
   set_interrupt_level(l);
 
   semaphore_P(socket->ack_ready_sem); //wait for ack packet...
@@ -731,8 +747,6 @@ void minisocket_close(minisocket_t socket)
   }
   socket->resend_alarm = NULL;
 
-  sock_array[socket->src_port] = NULL;
-  error = SOCKET_NOERROR;
   minisocket_destroy(socket, &error);
   printf("Closed. Error is %d", error);
   if (error != SOCKET_NOERROR){
@@ -740,7 +754,6 @@ void minisocket_close(minisocket_t socket)
   }
   set_interrupt_level(l);
 
-  //semaphore_V(socket->ack_ready_sem); //in case send() is blocked
   printf("in minisocket_close, SUCCESS\n");
   return;
 
@@ -850,6 +863,7 @@ void minisocket_process_packet(void* packet) {
     case CONNECT_WAIT://TODO
       if (type == MSG_FIN) {
         sock->curr_state = CLOSE_RCV;
+        semaphore_V(sock->ack_ready_sem);//notify blocked guy
       }
       else if (type == MSG_SYNACK) {
         if (ack_num == sock->curr_seq) {
@@ -863,7 +877,22 @@ void minisocket_process_packet(void* packet) {
       break;
     
     case MSG_WAIT:
-      if (type == MSG_ACK) {
+      if (type == MSG_FIN){
+        sock->curr_ack++;
+        minisocket_send_ctrl(MSG_ACK, sock, &error);//notify to closer
+        sock->curr_state = CLOSE_RCV;
+
+        if (sock->resend_alarm){
+          deregister_alarm(sock->resend_alarm);
+          sock->resend_alarm = NULL;
+        }
+        sock->resend_alarm = set_alarm(RESEND_TIME_UNIT * 150, 
+                                          self_destruct, 
+                                          (void*)sock, 
+                                          minithread_time());
+        semaphore_V(sock->ack_ready_sem);//notify blocked guy
+      }
+      else if (type == MSG_ACK) {
         if (ack_num == sock->curr_seq) {
           printf("got an ACK!\n");
           semaphore_V(sock->ack_ready_sem);
@@ -889,24 +918,50 @@ void minisocket_process_packet(void* packet) {
       if (type == MSG_ACK && ack_num == sock->curr_seq) {
           semaphore_V(sock->ack_ready_sem);
       }
-      free(pkt);
+      if (type == MSG_FIN){
+        sock->curr_ack++;
+        minisocket_send_ctrl(MSG_ACK, sock, &error);//notify to closer
+        sock->curr_state = CLOSE_RCV;
+
+        if (sock->resend_alarm){
+          deregister_alarm(sock->resend_alarm);
+          sock->resend_alarm = NULL;
+        }
+        sock->resend_alarm = set_alarm(RESEND_TIME_UNIT * 150, 
+                                          self_destruct, 
+                                          (void*)sock, 
+                                          minithread_time());
+        //minisocket_send_ctrl(MSG_ACK, sock, &error);
+      }
+      //free(pkt);
       break;
 
     case CLOSE_RCV:
       if (type == MSG_FIN && ack_num == sock->curr_seq) {
         minisocket_send_ctrl(MSG_ACK, sock, &error);
-        semaphore_V(sock->ack_ready_sem);
+        //semaphore_V(sock->ack_ready_sem);
       }
       free(pkt);
       break;
 
     case CONNECTED:
       if (type == MSG_FIN){
-        printf("YARRRRRR\n");
+        sock->curr_ack++;
+        minisocket_send_ctrl(MSG_ACK, sock, &error);//notify to closer
+        sock->curr_state = CLOSE_RCV;
+
+        if (sock->resend_alarm){
+          deregister_alarm(sock->resend_alarm);
+          sock->resend_alarm = NULL;
+        }
+        sock->resend_alarm = set_alarm(RESEND_TIME_UNIT * 150, 
+                                          self_destruct, 
+                                          (void*)sock, 
+                                          minithread_time());
       }
       if (type == MSG_ACK) {
         if (ack_num == sock->curr_seq) {
-          semaphore_V(sock->ack_ready_sem);
+          //semaphore_V(sock->ack_ready_sem);
           sock->curr_state = CONNECTED;
         }
         if (seq_num == sock->curr_ack+1 && data_len > 0) {
@@ -916,6 +971,9 @@ void minisocket_process_packet(void* packet) {
           minisocket_send_ctrl(MSG_ACK, sock, &error);
           semaphore_V(sock->pkt_ready_sem);
           printf("got data, no seg fault\n");
+        }
+        else if (seq_num == sock->curr_ack && data_len > 0){
+          minisocket_send_ctrl(MSG_ACK, sock, &error);
         }
         else {
           free(pkt);

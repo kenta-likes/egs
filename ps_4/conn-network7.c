@@ -23,7 +23,7 @@
 int port; /* port on which we do the communication */
 
 char* hostname;
-minisocket_t sock_array[NUM_SERVER];
+minisocket_t array[NUM_SERVER];
 
 char* GetErrorDescription(int errorcode){
   switch(errorcode){
@@ -64,12 +64,12 @@ int server(int* arg) {
   minisocket_error error;
 
   for (port = 0; port < NUM_SERVER; port++) {
-    sock_array[port] = minisocket_server_create(port,&error);
-    printf("made server at port %d.\n", port);
+    array[port] = minisocket_server_create(port,&error);
+    printf("made server at port %d. %s\n", port, GetErrorDescription(error));
   }
   for (port = 0; port < NUM_SERVER; port++) {
-    minisocket_close(sock_array[port]);
-    printf("closed socket at port %d.\n", port);
+    //minisocket_close(sock_array[port]);
+    //printf("closed socket at port %d.\n", port);
   }
   printf("succeeded in closing all sockets.\n");
   return 0;
@@ -84,7 +84,10 @@ int client(int* arg) {
   /* create a network connection to the local machine */
   for (port = 0; port < NUM_CLIENT; port++) {
     minisocket_client_create(address, port,&error);
-    printf("connected to server at port %d.\n", port);
+    if (error == SOCKET_NOERROR){
+      printf("connected to server at port %d.\n", port);
+      //minithread_sleep_with_timeout(100);
+    }
   }    
 
   return 0;
