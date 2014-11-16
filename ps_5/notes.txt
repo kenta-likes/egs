@@ -1,0 +1,39 @@
+When server is in LISTEN mode, ONLY V(ack_ready_sem) if the packet is MSG_SYN, otherwise drop.
+If we receive SYN in network handler:
+  - if state == LISTEN:
+    - V(ack_ready_sem)
+    - Change state to CONNECTING
+    - set addr and port
+  - if state != LISTEN:
+    - if addr and port match:
+      - drop
+    - else:
+      - SEND MSG_FIN
+If we receive MSG_FIN in network handler:
+  - if state == CLOSING:
+     - send MSG_ACK
+
+
+Closing connections:
+1. close connection function
+If we receive MSG_SYN OR MSG_SYNACK in network handler:
+  - if state == CONNECT_WAIT:
+    - if MSG_SYNACK:
+      - V(ack_ready_sem)
+    - else:
+      - drop
+  - if state == WAIT:
+    - if MSG_ACK:
+      - V(ack_ready_sem)
+    - else:
+      - drop
+
+
+
+KENTA's NOTES:
+make sure you don't destroy in receive after 7 retries (ie exit)
+In client_create:
+  - when transition from connect_wait to close_rcv, set SOCKET_BUSY error and
+    destroy
+  - assume: In network handler, receiving MSG_FIN always transitions to
+    CLOSE_RCV 
