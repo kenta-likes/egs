@@ -37,6 +37,7 @@ OBJ =                              \
     synch.o                        \
 		read.o												 \
     multilevel_queue.o             \
+    bhash_table.o                  \
 		miniheader.o									 \
 		minimsg.o											 \
 		network.o											 \

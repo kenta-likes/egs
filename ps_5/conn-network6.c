@@ -89,7 +89,6 @@ int client(int* arg) {
   printf("made a client\n");
 
   minisocket_receive(socket, msg, strlen("hello\n")+1, &error);
-  printf(msg);
   return 0;
 }
 

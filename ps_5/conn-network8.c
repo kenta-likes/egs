@@ -59,15 +59,14 @@ char* GetErrorDescription(int errorcode){
 
 int server(int* arg) {
   minisocket_error error;
-  minisocket_t server1;
-  minisocket_t server2;
+  minisocket_t server;
 
-  server1 = minisocket_server_create(port, &error);
+  server = minisocket_server_create(port, &error);
   assert(error == SOCKET_NOERROR); 
-  server2 = minisocket_server_create(port, &error);
+  minisocket_server_create(port, &error);
   printf("creating two servers on the same port cause a %s.\n", GetErrorDescription(error));  
 
-  minisocket_close(server1);
+  minisocket_close(server);
   assert(error == SOCKET_NOERROR);
   return 0;
 }
