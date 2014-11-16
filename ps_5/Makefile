@@ -35,11 +35,14 @@ OBJ =                              \
     alarm.o                        \
     queue.o                        \
     synch.o                        \
+		read.o												 \
     multilevel_queue.o             \
 		miniheader.o									 \
 		minimsg.o											 \
 		network.o											 \
     minisocket.o                   \
+		miniroute.o										 \
+
     
 %: %.o start.o end.o $(OBJ) $(SYSTEMOBJ)
 	$(CC) $(LIB) -o $@ start.o $(filter-out start.o end.o $(SYSTEMOBJ), $^) end.o $(SYSTEMOBJ) $(LFLAGS)
