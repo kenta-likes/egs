@@ -45,10 +45,13 @@ minithread.o
 multilevel_queue.o
 queue.o
 random.o
+read.o
+miniroute.o
 sieve.o
 start.o
 synch.o
 multilevel_queue_test.o
+bhash_table.o
 queue_test.o
 test1.o
 test2.o
