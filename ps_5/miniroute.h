@@ -2,6 +2,11 @@
 #define _MINIROUTE_H_
 
 #include "minimsg.h"
+#include <stdio.h>
+#include <stdlib.h>
+
+#define MAX_ROUTE_LENGTH 20
+#define SIZE_OF_ROUTE_CACHE 20
 
 enum routing_packet_type {
   ROUTING_DATA=0,
@@ -9,9 +14,7 @@ enum routing_packet_type {
   ROUTING_ROUTE_REPLY=2
 };
 
-#define MAX_ROUTE_LENGTH 20
-#define SIZE_OF_ROUTE_CACHE 20
-
+typedef struct miniroute* miniroute_t;
 
 struct routing_header {
 	char routing_packet_type;		/* the type of routing packet */
@@ -25,6 +28,7 @@ struct routing_header {
 									   The address of the source is stored in the first position, and the
 									   address of the destination is stored in the last position. */
 };
+
 
 /* Performs any initialization of the miniroute layer, if required. */
 void miniroute_initialize();
