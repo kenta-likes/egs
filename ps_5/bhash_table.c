@@ -89,26 +89,24 @@ int bhash_table_add(bhash_table_t ht, network_address_t key, void* value) {
 int bhash_table_contains(bhash_table_t ht, network_address_t key) {
   unsigned short idx;
   ht_node_t curr;
-  int found = 0;
   
   if (ht == NULL) {
-    return -1;
+    return 0;
   }
 
   idx = hash_address(key) % (ht->capacity * 2);
-
   if (ht->array[idx]) {
     curr = ht->array[idx];
-    while ((curr != NULL) && (found == 0)) {
+    while (curr != NULL) {
       if (network_compare_network_addresses(curr->key, key)) { // same 
-        found = 1;
+        return 1;
       }
       else {
         curr = curr->next;
       }
     }  
   }
-  return found;
+  return 0;
 }
 
 /* Returns the value associated with the key or null if key not contained in table.
