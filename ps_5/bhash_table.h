@@ -23,7 +23,7 @@ extern bhash_table_t bhash_table_create(int capacity);
  */
 extern int bhash_table_add(bhash_table_t ht, network_address_t key, void* value);
 
-/* Returns 0 if key in table or -1 if not.
+/* Returns 1 if key in table or 0 if not.
  */
 extern int bhash_table_contains(bhash_table_t ht, network_address_t key);
 

@@ -24,6 +24,7 @@ struct bhash_table {
  */
 bhash_table_t bhash_table_create(int capacity) {
   bhash_table_t new_ht;
+  int i;
 
   if (capacity < 1) {
     return NULL;
@@ -43,6 +44,10 @@ bhash_table_t bhash_table_create(int capacity) {
     return NULL;
   }
 
+  for (i = 0; i < (new_ht->capacity * 2); i++) {
+    new_ht->array[i] = NULL;
+  }
+
   return new_ht;  
 }
 
@@ -53,7 +58,7 @@ bhash_table_t bhash_table_create(int capacity) {
 int bhash_table_add(bhash_table_t ht, network_address_t key, void* value) {
   unsigned short idx;
   ht_node_t new_node;
-
+  
   if (ht == NULL || ht->size == ht->capacity || value == NULL) {
     return -1;
   }
@@ -79,30 +84,30 @@ int bhash_table_add(bhash_table_t ht, network_address_t key, void* value) {
   return 0;
 }
 
-/* Returns 0 if key in table or -1 if not.
+/* Returns 1 if key in table or 0 if not.
  */
 int bhash_table_contains(bhash_table_t ht, network_address_t key) {
   unsigned short idx;
   ht_node_t curr;
-  int found = -1;
+  int found = 0;
   
   if (ht == NULL) {
     return -1;
   }
 
   idx = hash_address(key) % (ht->capacity * 2);
+
   if (ht->array[idx]) {
     curr = ht->array[idx];
-    while ((curr != NULL) && (found == -1)) {
-      if (network_compare_network_addresses(curr->key, key)) { // different
-        curr = curr->next;
+    while ((curr != NULL) && (found == 0)) {
+      if (network_compare_network_addresses(curr->key, key)) { // same 
+        found = 1;
       }
       else {
-        found = 0;
+        curr = curr->next;
       }
     }  
   }
-
   return found;
 }
 
@@ -120,11 +125,11 @@ void* bhash_table_get(bhash_table_t ht, network_address_t key) {
   if (ht->array[idx]) {
     curr = ht->array[idx];
     while (curr != NULL) {
-      if (network_compare_network_addresses(curr->key, key)) { // different
-        curr = curr->next;
+      if (network_compare_network_addresses(curr->key, key)) { // same 
+        return curr->value;
       }
       else {
-        return curr->value;
+        curr = curr->next;
       }
     }  
     return NULL;
@@ -199,22 +204,24 @@ void* bhash_table_remove(bhash_table_t ht, network_address_t key) {
   idx = hash_address(key) % (ht->capacity * 2);
   if (ht->array[idx]) {
     curr = ht->array[idx];
-    if (!network_compare_network_addresses(curr->key, key)) { // found it
+    if (network_compare_network_addresses(curr->key, key)) { // found it
       value = curr->value;
       ht->array[idx] = curr->next;
       free(curr);
+      ht->size--; 
       return value;
     }
     while (curr->next != NULL) {
-      if (network_compare_network_addresses(curr->next->key, key)) { // different
-        curr = curr->next;
-      }
-      else {
+      if (network_compare_network_addresses(curr->next->key, key)) { // same 
         value = curr->next->value;
         temp = curr->next;
         curr->next = curr->next->next;
         free(temp);
+        ht->size--; 
         return value;
+      }
+      else {
+        curr = curr->next;
       }
     }
     return NULL;
