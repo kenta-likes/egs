@@ -19,10 +19,11 @@ extern bhash_table_t bhash_table_create(int capacity);
 
 /* Adds a void* to a bhash_table (both specifed as parameters).
  * Returns 0 (success) or -1 (failure).
+ * We don't allow NULL values.
  */
 extern int bhash_table_add(bhash_table_t ht, network_address_t key, void* value);
 
-/* Returns 0 if key in table or -1 if not.
+/* Returns 1 if key in table or 0 if not.
  */
 extern int bhash_table_contains(bhash_table_t ht, network_address_t key);
 
