@@ -1,7 +1,9 @@
 /* Performs any initialization of the miniroute layer, if required. */
 #include "miniroute_cache.h"
+#include "interrupts.h"
+#include "miniroute.h"
 
-#define CACHE_TIME = 3000.0f //3000 millisconds = 3 seconds.
+#define CACHE_TIME 3000.0f //3000 millisconds = 3 seconds.
 
 //node type for storing addresses
 typedef struct dlink_node{
@@ -25,29 +27,61 @@ struct miniroute_cache{
 struct miniroute{
   network_address_t* route;
   int len;
-}
+};
 
-//container for route cache
-miniroute_cache_t route_cache;
 
-miniroute_cache miniroute_cache_create(){
-  route_cache.miniroute_listtt.hd = NULL;
-  route_cache.miniroute_list.hd = NULL;
-  route_cache.miniroute_list.tl = NULL;
-  route_cache.miniroute_list.len = 0;
-  route_cache.miniroute_table = hash_table_create();
-}
+miniroute_cache_t miniroute_cache_create(){
+  miniroute_cache_t route_cache;
 
-int miniroute_add( network_address_t key, miniroute_t val){
-  if (hash_table_contains(route_cache.miniroute_table, new_key)){
-    //keep element but update the alarm
-    deregister_alarm(hash_table_get(route_cache.miniroute_table, new_key).destroy_alarm);
+  route_cache = (miniroute_cache_t)malloc(sizeof(struct miniroute_cache));
+  if (!route_cache){
+    return NULL;
   }
-    if (route_cache.num_elems < SIZE_OF_ROUTE_CACHE) {
-      hash_table_add(route_cache.miniroute_table, new_key, );
-    }
-    return 0;
+  route_cache->cache_list.hd = NULL;
+  route_cache->cache_list.tl = NULL;
+  route_cache->cache_list.len = 0;
+  route_cache->cache_table = hash_table_create();
+  return route_cache;
+}
 
-  return -1;
+/*destroys an entry from the hashtable*/
+int destroy_entry(hash_table_t route_table, network_address_t key){
+  //free struct stored
+  //call hashtable remove to remove linked list node
+  return 0;
+}
 
+
+/*
+ * adds a route to the route cache
+ * If route already exists in cache, this function
+ * simply updates the alarm so that it will not be
+ * evicted after another 3 seconds.
+ * If the route did not already exist in the cache,
+ * the LRU route is evicted and the new route is added
+ * */
+int miniroute_cache_put(miniroute_cache_t route_cache, network_address_t key, miniroute_t val){
+  interrupt_level_t l;
+
+  l = set_interrupt_level(DISABLED);
+  if (route_cache->cache_list.len >= SIZE_OF_ROUTE_CACHE) {
+    //evict oldest cache
+    (route_cache->cache_list.len)--;
+    destroy_entry(route_cache->cache_table, route_cache->cache_list.tl->key);
+    route_cache->cache_list.tl = route_cache->cache_list.tl->prev;
+    route_cache->cache_list.tl->next = NULL;
+    route_cache->cache_list.tl->prev->next = NULL;
+  }
+
+  return 0;
+}
+
+
+/*
+ * returns the route associated with a given address,
+ * if it exists in the cache. If not, it will return NULL
+ * Updates the alarm if called and exists
+ * */
+miniroute_t miniroute_cache_get(miniroute_cache_t route_cache, network_address_t key){
+  return NULL;
 }
