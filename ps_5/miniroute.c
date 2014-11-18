@@ -1,17 +1,13 @@
 #include "miniroute.h"
-#include "lru_cache.h"
+#include "miniroute_cache.h"
 
-struct miniroute{
-  network_address_t* route;
-  int len;
-};
-
-lru_cache_t route_cache;
+//our route cache
+miniroute_cache_t route_cache;
 
 void miniroute_initialize()
 {
   return;
-  route_cache = lru_cache_create();
+  route_cache = miniroute_cache_create();
 }
 
 
@@ -20,6 +16,8 @@ void miniroute_initialize()
  */
 int miniroute_send_pkt(network_address_t dest_address, int hdr_len, char* hdr, int data_len, char* data)
 {
+  //testing out stuf
+  //miniroute_cache_add(dest_address);
   return 0;
 }
 
