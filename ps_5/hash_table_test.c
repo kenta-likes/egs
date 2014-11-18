@@ -23,7 +23,7 @@ int main(void) {
   assert(ht == NULL);
 
   assert(network_compare_network_addresses(addr1, addr1));
-  ht = hash_table_create(32);
+  ht = hash_table_create();
   hash_table_add(ht, addr1, (void*)8);
   hash_table_add(ht, addr2, (void*)16);
   hash_table_add(ht, addr3, (void*)24);
@@ -38,7 +38,7 @@ int main(void) {
   assert(hash_table_size(ht) == 2);
   assert(!hash_table_destroy(ht));
   
-  ht = hash_table_create(2);
+  ht = hash_table_create();
   assert(hash_table_size(ht) == 0);
   assert(!hash_table_add(ht, addr1, (void*)8));
   assert((long)hash_table_get(ht, addr2) == 0);
@@ -46,7 +46,7 @@ int main(void) {
   assert((long)hash_table_get(ht, addr2) == 16);
   assert(!hash_table_destroy(ht));
 
-  ht = hash_table_create(20);
+  ht = hash_table_create();
   hash_table_add(ht, addr4, (void*)32);
   hash_table_add(ht, addr4, (void*)32);
   hash_table_add(ht, addr4, (void*)32);

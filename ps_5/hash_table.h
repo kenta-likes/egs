@@ -1,5 +1,4 @@
 /* Generic hashtable manipulation functions
- * This table is thread safe.
  */
 #ifndef __BOUNDED_HT_H__
 #define __BOUNDED_HT_H__
@@ -13,9 +12,8 @@
 typedef struct hash_table* hash_table_t;
 
 /* Return an empty hash_table.  Returns NULL on error.
- * This table will have fixed capacity of capacity.
  */
-extern hash_table_t hash_table_create(int capacity);
+extern hash_table_t hash_table_create();
 
 /* Adds a void* to a hash_table (both specifed as parameters).
  * Returns 0 (success) or -1 (failure).
@@ -35,12 +33,13 @@ extern int hash_table_destroy(hash_table_t ht);
  */
 extern int hash_table_size(hash_table_t ht);
 
-/* Return the capacity of this hash_table, or -1 if an error occured
+/* Return the capacity of of the array backing this hash_table, or -1 if an error occured
  */
 extern int hash_table_capacity(hash_table_t ht);
 
 /* Delete the first instance of key from the given hash_table.
  * Returns the val associated with the key that was removed.
+ * If key not contained, does nothing and returns NULL.
  */
 extern void* hash_table_remove(hash_table_t ht, network_address_t key);
 

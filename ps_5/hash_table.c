@@ -24,13 +24,9 @@ struct hash_table {
 
 /* Return an empty hash_table.  Returns NULL on error.
  */
-hash_table_t hash_table_create(int capacity) {
+hash_table_t hash_table_create() {
   hash_table_t new_ht;
   int i;
-
-  if (capacity < 1) {
-    return NULL;
-  }
 
   new_ht = (hash_table_t)malloc(sizeof(struct hash_table));
   if (new_ht == NULL) {
@@ -196,6 +192,8 @@ int hash_table_size(hash_table_t ht) {
   return ht->size;
 }
 
+/* Return the capacity of of the array backing this hash_table, or -1 if an error occured
+ */
 int hash_table_capacity(hash_table_t ht) {
   if (ht == NULL) {
     return -1;
@@ -219,7 +217,7 @@ void* hash_table_remove(hash_table_t ht, network_address_t key) {
   }
 
   l = set_interrupt_level(DISABLED); 
-  idx = hash_address(key) % (ht->capacity * 2);
+  idx = hash_address(key) % ht->capacity;
   if (ht->array[idx]) {
     curr = ht->array[idx];
     if (network_compare_network_addresses(curr->key, key)) { // found it
@@ -254,22 +252,29 @@ void* hash_table_remove(hash_table_t ht, network_address_t key) {
 }
 
 /* helper function for hash_table_add and hash_table_remove.
- * Called with interrupts disabled, so thread safe.
  * Returns 0 on success, -1 on failure.
  */
 int hash_table_resize(hash_table_t ht, int grow) {
-  //int old_capacity;
-  //ht_node_t old_array;
+  int old_capacity;
+  ht_node_t* old_array;
+  ht_node_t curr;
+  ht_node_t temp;
   int i;
+
+  old_capacity = ht->capacity;
+  old_array = ht->array;
 
   if (grow) {
     ht->capacity *= 2;
     ht->threshold_grow *= 2;
     ht->threshold_shrink *= 2;
 
-    ht->array = (ht_node_t*)malloc(sizeof(ht_node_t) * ht->capacity * 2);
+    ht->array = (ht_node_t*)malloc(sizeof(ht_node_t) * ht->capacity);
     if (ht->array == NULL) {
-      // roll back changes
+      ht->capacity /= 2;
+      ht->threshold_grow /= 2;
+      ht->threshold_shrink /= 2;
+      ht->array = old_array;
       return -1;
     }
   }
@@ -278,17 +283,30 @@ int hash_table_resize(hash_table_t ht, int grow) {
     ht->threshold_grow /= 2;
     ht->threshold_shrink /= 2;
 
-    ht->array = (ht_node_t*)malloc(sizeof(ht_node_t) * ht->capacity * 2);
+    ht->array = (ht_node_t*)malloc(sizeof(ht_node_t) * ht->capacity);
     if (ht->array == NULL) {
-      // roll back changes
+      ht->capacity *= 2;
+      ht->threshold_grow *= 2;
+      ht->threshold_shrink *= 2;
+      ht->array = old_array;
       return -1;
     }
   }
 
-  for (i = 0; i < (ht->capacity * 2); i++) {
+  for (i = 0; i < ht->capacity; i++) {
     ht->array[i] = NULL;
   }
   // move things and free
 
+  for (i = 0; i < old_capacity; i++) {
+    if (old_array[i]) {
+      curr = old_array[i];
+      while (curr != NULL) {
+        temp = curr;
+        curr = curr->next;
+        free(temp);
+      } 
+    }
+  }
   return 0;
 }
