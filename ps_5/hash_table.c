@@ -58,16 +58,13 @@ hash_table_t hash_table_create() {
 int hash_table_add(hash_table_t ht, network_address_t key, void* val) {
   unsigned short idx;
   ht_node_t new_node;
-  interrupt_level_t l;
   
   if (ht == NULL || ht->size == ht->capacity || val == NULL) {
     return -1;
   }
  
-  l = set_interrupt_level(DISABLED); 
   new_node = (ht_node_t)malloc(sizeof(struct ht_node));
   if (new_node == NULL) {
-    set_interrupt_level(l);
     return -1;
   }
   
@@ -84,7 +81,6 @@ int hash_table_add(hash_table_t ht, network_address_t key, void* val) {
   }
   
   ht->size++;
-  set_interrupt_level(l);
   return 0;
 }
 
@@ -259,6 +255,7 @@ int hash_table_resize(hash_table_t ht, int grow) {
   ht_node_t* old_array;
   ht_node_t curr;
   ht_node_t temp;
+  unsigned short idx;
   int i;
 
   old_capacity = ht->capacity;
@@ -304,9 +301,19 @@ int hash_table_resize(hash_table_t ht, int grow) {
       while (curr != NULL) {
         temp = curr;
         curr = curr->next;
-        free(temp);
+        idx = hash_address(temp->key) % ht->capacity;
+        if (ht->array[idx]) {
+          temp->next = ht->array[idx];
+          ht->array[idx] = temp;
+        }
+        else {
+          temp->next = NULL;
+          ht->array[idx] = temp;
+        }
+        curr = curr->next;
       } 
     }
+    // nothing at this idx, move on
   }
   return 0;
 }
