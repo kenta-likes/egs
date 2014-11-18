@@ -5,7 +5,7 @@ alarmtest1
 alarmtest2
 test_sleep
 multilevel_queue_test
-bhash_table_test
+hash_table_test
 shop
 queue_test
 test1
@@ -52,8 +52,8 @@ sieve.o
 start.o
 synch.o
 multilevel_queue_test.o
-bhash_table_test.o
-bhash_table.o
+hash_table_test.o
+hash_table.o
 queue_test.o
 test1.o
 test2.o
