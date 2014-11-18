@@ -6,6 +6,7 @@ alarmtest2
 test_sleep
 multilevel_queue_test
 hash_table_test
+miniroute_cache_test
 shop
 queue_test
 test1
@@ -89,3 +90,4 @@ network8.o
 network9.o
 network10.o
 network_test_bound.o
+miniroute_cache_test.o
