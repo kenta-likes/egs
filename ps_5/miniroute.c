@@ -6,8 +6,8 @@ miniroute_cache_t route_cache;
 
 void miniroute_initialize()
 {
-  return;
   route_cache = miniroute_cache_create();
+  return;
 }
 
 
