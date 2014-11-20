@@ -6,7 +6,7 @@
 #include "miniroute_cache.h"
 
 int main(void) {
-  miniroute_cache_t cache;
-  cache = miniroute_cache_create();
+  //miniroute_cache_t cache;
+  //cache = miniroute_cache_create();
   return 0;
 }

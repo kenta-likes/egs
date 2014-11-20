@@ -252,7 +252,8 @@ int hash_table_size(hash_table_t ht) {
   return ht->size;
 }
 
-/* Return the capacity of of the array backing this hash_table, or -1 if an error occured
+/* Return the capacity of of the array backing this hash_table, 
+ * or -1 if an error occured
  */
 int hash_table_capacity(hash_table_t ht) {
   if (ht == NULL) {

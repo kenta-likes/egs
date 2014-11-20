@@ -21,10 +21,21 @@ void miniroute_initialize()
  */
 int miniroute_send_pkt(network_address_t dest_address, int hdr_len, char* hdr, int data_len, char* data)
 {
-  //testing out stuf
+  //testing out stuff
   //miniroute_cache_add(dest_address);
   return 0;
 }
+
+miniroute_t miniroute_discover_route(network_address_t dest) {
+  //disable intterupts
+  //check cache if network_address is contained
+    //if is, just return
+    //else, create sema_struct, and put into table
+  //acquire the mutex for this ip
+  //if in cache, release mutex, return
+  //else, send broadcast
+}
+
 
 /* hashes a network_address_t into a 16 bit unsigned int */
 unsigned short hash_address(network_address_t address)
