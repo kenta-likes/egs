@@ -91,3 +91,4 @@ network9.o
 network10.o
 network_test_bound.o
 miniroute_cache_test.o
+miniroute_cache.o

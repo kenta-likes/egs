@@ -4,15 +4,10 @@
 //our route cache
 miniroute_cache_t route_cache;
 
-struct miniroute{
-  network_address_t route;
-  int len;
-};
-
 void miniroute_initialize()
 {
-  return;
   route_cache = miniroute_cache_create();
+  return;
 }
 
 
@@ -34,6 +29,8 @@ miniroute_t miniroute_discover_route(network_address_t dest) {
   //acquire the mutex for this ip
   //if in cache, release mutex, return
   //else, send broadcast
+
+  return NULL;
 }
 
 

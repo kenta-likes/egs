@@ -19,24 +19,34 @@ struct dlink_list{
   int len;
 };
 
+//cache data type
 struct miniroute_cache{
   hash_table_t cache_table;
   struct dlink_list cache_list;
 };
 
+//hash table entries
 typedef struct cache_entry{
   miniroute_t route;
   alarm_t route_alarm;
 }* cache_entry_t;
 
+//alarm argument
 typedef struct cache_alarm_arg{
   miniroute_cache_t route_cache;
   dlink_node_t node;
 }* cache_alarm_arg_t;
 
+//forward declaration for alarm function
 void destroy_entry(void* arg);
 
 
+/**
+ *  Initializes a new route cache
+ *  Creates a new empty hash table, an empty
+ *  linked list, and returns a reference to the cache
+ *  object
+ */
 miniroute_cache_t miniroute_cache_create(){
   miniroute_cache_t route_cache;
 

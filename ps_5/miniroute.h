@@ -15,7 +15,10 @@ enum routing_packet_type {
 };
 
 /*data type for storing routes*/
-typedef struct miniroute* miniroute_t;
+typedef struct miniroute{
+  network_address_t* route;
+  int len;
+}* miniroute_t;
 
 struct routing_header {
 	char routing_packet_type;		/* the type of routing packet */
