@@ -88,7 +88,6 @@ network_bcast_pkt(int hdr_len, char* hdr, int data_len, char* data);
 void network_get_my_address(network_address_t my_address);
 
 /* look up the given host and return the corresponding network address.
- * Returns TODO
  */
 int network_translate_hostname(char* hostname, network_address_t address);
 
