@@ -8,10 +8,6 @@
 #include "network.h"
 
 int main(void) {
-<<<<<<< HEAD
-  //miniroute_cache_t cache;
-  //cache = miniroute_cache_create();
-=======
   miniroute_cache_t test_cache;
   network_address_t test_addr;
   miniroute_t test_route;
@@ -24,6 +20,5 @@ int main(void) {
   network_address_copy(test_addr,test_route->route[0]);
 
   miniroute_cache_put(test_cache, test_addr, test_route);
->>>>>>> fa8f0e32a605c4d45130e563e9c57d9fecd3c36d
   return 0;
 }
