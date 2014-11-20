@@ -24,8 +24,13 @@ struct miniroute_cache{
   struct dlink_list cache_list;
 };
 
+typedef struct cache_entry{
+  miniroute_t route;
+  alarm_t route_alarm;
+}* cache_t;
+
 struct miniroute{
-  network_address_t* route;
+  network_address_t route;
   int len;
 };
 
@@ -58,20 +63,31 @@ int destroy_entry(hash_table_t route_table, network_address_t key){
  * simply updates the alarm so that it will not be
  * evicted after another 3 seconds.
  * If the route did not already exist in the cache,
- * the LRU route is evicted and the new route is added
+ * the oldest route is evicted and the new route is added
  * */
 int miniroute_cache_put(miniroute_cache_t route_cache, network_address_t key, miniroute_t val){
   interrupt_level_t l;
+  dlink_node_t tmp;
 
   l = set_interrupt_level(DISABLED);
   if (route_cache->cache_list.len >= SIZE_OF_ROUTE_CACHE) {
     //evict oldest cache
-    (route_cache->cache_list.len)--;
-    destroy_entry(route_cache->cache_table, route_cache->cache_list.tl->key);
-    route_cache->cache_list.tl = route_cache->cache_list.tl->prev;
-    route_cache->cache_list.tl->next = NULL;
-    route_cache->cache_list.tl->prev->next = NULL;
+    destroy_entry(route_cache->cache_table, route_cache->cache_list.tl->key);//destroy key value
+    tmp = route_cache->cache_list.tl->prev; //store new tail
+    free(route_cache->cache_list.tl); //free list node
+    tmp->next = NULL; //set last node next to null
+    route_cache->cache_list.tl = tmp; //set new tail
+    (route_cache->cache_list.len)--; //reduce len
   }
+  //add the new entry
+  hash_table_add(route_cache->cache_table, key, (void*)val);
+  tmp = (dlink_node_t)malloc(sizeof(struct dlink_node));
+  network_address_copy(tmp->key, key);
+  tmp->next = route_cache->cache_list.hd;
+  tmp->prev = NULL;
+  route_cache->cache_list.hd->prev = tmp;
+  route_cache->cache_list.hd = tmp;
+  set_interrupt_level(l);
 
   return 0;
 }
