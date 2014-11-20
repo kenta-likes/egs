@@ -4,6 +4,11 @@
 //our route cache
 miniroute_cache_t route_cache;
 
+struct miniroute{
+  network_address_t route;
+  int len;
+};
+
 void miniroute_initialize()
 {
   return;

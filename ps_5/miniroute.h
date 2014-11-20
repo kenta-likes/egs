@@ -14,6 +14,9 @@ enum routing_packet_type {
   ROUTING_ROUTE_REPLY=2
 };
 
+/*data type for storing routes*/
+typedef struct miniroute* miniroute_t;
+
 struct routing_header {
 	char routing_packet_type;		/* the type of routing packet */
 	char destination[8];			/* ultimate destination of routing packet */

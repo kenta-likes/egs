@@ -3,6 +3,7 @@
 #include "alarm.h"
 #include "network.h"
 #include "hash_table.h"
+#include "miniroute.h"
 
 /*This class is interrupt safe since it
  * touches the alarms which deal with
@@ -10,8 +11,6 @@
  * interrupts
  * */
 
-/*data type for storing routes*/
-typedef struct miniroute* miniroute_t;
 
 /*route_cache data type*/
 typedef struct miniroute_cache* miniroute_cache_t;
