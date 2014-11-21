@@ -143,10 +143,11 @@ int hash_table_add(hash_table_t ht, network_address_t key, void* val) {
   if (new_node == NULL) {
     return -1;
   }
-  
+    
   network_address_copy(key, new_node->key);
   new_node->val = val;
- 
+  new_node->next = NULL;
+
   idx = hash_address(key) % ht->capacity;
   if (ht->array[idx]) {
     new_node->next = ht->array[idx];
@@ -224,7 +225,6 @@ int hash_table_destroy(hash_table_t ht) {
   if (ht == NULL) {
     return -1;
   }
-
   array_len = ht->capacity;
   for (i = 0; i < array_len; i++) {
     if (ht->array[i]) {
@@ -234,7 +234,7 @@ int hash_table_destroy(hash_table_t ht) {
         curr = curr->next;
         free(temp);
       } 
-    }
+    } 
   }
   free(ht->array);
   free(ht);

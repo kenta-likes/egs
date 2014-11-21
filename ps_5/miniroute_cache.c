@@ -61,24 +61,42 @@ miniroute_cache_t miniroute_cache_create(){
   return route_cache;
 }
 
+
+
 void miniroute_cache_destroy(miniroute_cache_t route_cache){
   interrupt_level_t l;
   dlink_node_t curr_node;
   dlink_node_t tmp;
+  network_address_t key;
+  key[0] = 0;
+  key[1] = 0;
 
   l = set_interrupt_level(DISABLED);
   curr_node = route_cache->cache_list.hd;
   
   while (curr_node != NULL){
+    printf("1\n");
     deregister_alarm( ((cache_entry_t)hash_table_get(route_cache->cache_table, curr_node->key))->route_alarm );
+    printf("2\n");
     free(hash_table_get(route_cache->cache_table, curr_node->key));
+    printf("3\n");
     hash_table_remove(route_cache->cache_table, curr_node->key);
+    printf("4\n");
     tmp = curr_node->next;
+    printf("5\n");
     free(curr_node);
+    printf("6\n");
     curr_node = tmp;
+    printf("7\n");
+  }
+  printf("8\n");
+  if (!hash_table_get(route_cache->cache_table, key)){
+    printf("YES\n");
   }
   hash_table_destroy(route_cache->cache_table);
+  printf("9\n");
   free(route_cache);
+  printf("10\n");
   set_interrupt_level(l);
   return;
   
@@ -114,7 +132,7 @@ void destroy_entry(void* arg){
       entry_alarm->route_cache->cache_list.hd = NULL;
       entry_alarm->route_cache->cache_list.tl = NULL;
       (entry_alarm->route_cache->cache_list.len)--;
-      free(entry_alarm);
+      //free(entry_alarm);
     }
     else { //remove head or tail
       if (delete_node->next == NULL){ //tail
@@ -125,7 +143,7 @@ void destroy_entry(void* arg){
         free(delete_entry->route);
         free(delete_entry);
         (entry_alarm->route_cache->cache_list.len)--;
-        free(entry_alarm);
+        //free(entry_alarm);
       }
       else { //head
         delete_node->next->prev = NULL;
@@ -135,7 +153,7 @@ void destroy_entry(void* arg){
         free(delete_entry->route);
         free(delete_entry);
         (entry_alarm->route_cache->cache_list.len)--;
-        free(entry_alarm);
+        //free(entry_alarm);
       }
     }
   }
@@ -147,7 +165,7 @@ void destroy_entry(void* arg){
     free(delete_entry->route);
     free(delete_entry);
     (entry_alarm->route_cache->cache_list.len)--;
-    free(entry_alarm);
+    //free(entry_alarm);
   }
   return;
 }

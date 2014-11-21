@@ -103,7 +103,7 @@ int test_cache (int* arg) {
   printf("timeout 20......PASS\n");
 
   printf("Cache tests all PASS!!\n");
-  //miniroute_cache_destroy(test_cache);
+  miniroute_cache_destroy(test_cache);
   return 0;
 }
 

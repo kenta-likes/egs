@@ -303,6 +303,9 @@ network_handler(network_interrupt_arg_t* pkt){
   
   printf("in network_handler\n");
   l = set_interrupt_level(DISABLED);
+
+  //first check if router packet is destined for us
+  
   pkt_hdr = (mini_header_t)(&pkt->buffer);
   protocol = pkt_hdr->protocol;
  
