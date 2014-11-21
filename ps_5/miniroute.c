@@ -46,6 +46,146 @@ void miniroute_initialize() {
   return;
 }
 
+/* Takes in a routing packet and does error checking.
+ * Adds it to the cache if this packet was destined for us. 
+ * Returns 1 if this packet has data to be passed along,
+ * O otherwise.
+ */
+int miniroute_process_packet(network_interrupt_arg_t* pkt) {
+  struct routing_header* pkt_hdr = NULL;
+  network_address_t tmp_addr = NULL;
+  network_address_t src_addr = NULL;
+  network_address_t dst_addr = NULL;
+  network_address_t nxt_addr = NULL;
+  unsigned int discovery_pkt_id;
+  unsigned int pkt_ttl;
+  unsigned int path_len;
+  miniroute_t path = NULL; 
+  miniroute_t new_path = NULL;
+  network_address_t* new_route = NULL;
+  unsigned int i;
+  unsigned int found;
+  struct routing_header hdr;
+  char tmp;
+  dcb_t control_block;
+  
+  
+  if (pkt == NULL || pkt->size < sizeof(struct routing_header)) {
+    return;
+  }
+  
+  pkt_hdr = (struct routing_header*)pkt->buffer;
+  unpack_address(dst_addr, pkt_hdr->destination);
+  discovery_pkt_id = unpack_unsigned_int(pkt_hdr->id);
+  pkt_ttl = unpack_unsigned_int(pkt_hdr->ttl);
+  path_len = unpack_unsigned_int(pkt_hdr->path_len);
+  unpack_address(src_addr, pkt_hdr->path[0]);
+
+  if (network_compare_network_addresses(my_addr, dst_addr)) {
+    //same
+    if (!miniroute_cache_get(route_cache, src_addr)) {
+      //not in cache 
+      new_route = (network_address_t*)calloc(path_len, sizeof(network_address_t));
+      if (new_route == NULL) {
+        free(pkt);
+        return 0;
+      }
+      for (i = 0; i < path_len; i++) {
+        unpack_address(tmp_addr, pkt_hdr->path[path_len - i - 1]);
+        network_copy_address(tmp_addr, new_route[i]);
+      }
+      new_path = (miniroute_t)calloc(1, sizeof(struct miniroute));
+      if (new_path == NULL) {
+        free(pkt);
+        free(new_route);
+        return 0;
+      }
+      new_path->route = new_route;
+      new_path->len = path_len; 
+      miniroute_cache_put(route_cache, src_addr, new_path);
+    } //added new route to cache
+  }
+  else {
+    //different
+    if (pkt_ttl <= 0) {
+      free(pkt);
+      return 0;
+    }
+    // check from 2nd to second to last address
+    found = 0;
+    for (i = 1; i < path_len - 2; i++) {
+      unpack_address(tmp_addr, pkt_hdr->path[i]);
+      if (network_compare_network_address(my_addr, tmp_addr)) {
+        unpack_address(nxt_addr, pkt_hdr->path[i+1]);
+        found = 1;
+        break; 
+      }
+    }
+    if (!found) {
+      free(pkt);
+      return 0;
+    }
+  }
+
+  switch (pkt_hdr->routing_packet_type) {
+  case ROUTING_DATA:
+    if (network_compare_network_addresses(my_addr, dst_addr)) {
+      //same
+      return 1;
+    }
+    else {
+      //different
+      //check ttl
+      //scan to check if i am in list
+      //if yes then pass along, else discard
+    }
+    break;
+
+  case ROUTING_ROUTE_DISCOVERY:
+    if (network_compare_network_addresses(my_addr, dst_addr)) {
+      //same  
+      path = miniroute_cache_get(route_cache, src_addr);
+
+      hdr.routing_packet_type = ROUTING_ROUTE_REPLY;
+      pack_address(hdr.destination, src_addr);
+      pack_unsigned_int(hdr.id, discovery_pkt_id);
+      pack_unsigned_int(hdr.ttl, MAX_ROUTE_LENGTH);
+      pack_unsigned_int(hdr.path_len, path->len);
+      for (i = 0; i < path->len; i++) {
+        pack_address(hdr.path[i], path->route[i]);
+      }
+      network_send_pkt(sizeof(struct routing_header), (char*)(&hdr), 0, &tmp);
+    }
+    else {
+      //different
+      //check ttl
+      //scan to check if i am in list
+      //if yes then discard
+      //else append to path vector and broadcast
+    }
+    break;
+
+  case ROUTING_ROUTE_REPLY:
+    if (network_compare_network_addresses(my_addr, dst_addr)) {
+      //same
+      control_block = hash_table_get(dcb_table, src_addr);
+    }
+    else {
+      //different
+      //check ttl
+      //scan to check if i am in list
+      //if yes then pass along, else discard
+    }
+    break;
+
+  default:
+    //WTFFF???
+    break;
+  }    
+  free(pkt);
+  return 0;
+}
+
 /* Note: alarm function, so called with interrupts disabled.
  */
 void miniroute_resend(void* arg) {

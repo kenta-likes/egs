@@ -313,7 +313,6 @@ void
 network_handler(network_interrupt_arg_t* pkt){
   interrupt_level_t l;
   mini_header_t pkt_hdr;
-  struct routing_header* router_hdr;
   char protocol;
   char* buf_ptr;
   
@@ -346,8 +345,10 @@ struct routing_header {
   //if (miniroute_process_packet(pkt){
     //send reply packet
     buf_ptr = pkt->buffer;
-    router_hdr = (struct routing_header*)buf_ptr; //set header to data
-    ///router_hdr->routing_packet_type = ROUTING_REPLY;
+    buf_ptr[0] = ROUTING_REPLY;
+    buf_ptr += 1;
+    network_copybuf_ptr
+    //router_hdr = (struct routing_header*)buf_ptr; //set header to data
     //offset to path field. 1 + 8 + 4 + 4 + 4 = 21
     memcpy(router_hdr->destination, buf_ptr + 21, 8);
     //keep the same broadcast id
@@ -356,6 +357,7 @@ struct routing_header {
    
  
     //pass packet on to tcp/udp 
+    buf_ptr = pkt->buffer;
     //shift contents of pkt buf to overwrite router headers
     shift_by_n(buf_ptr, sizeof(struct routing_header ), (pkt->size - sizeof(struct routing_header)) );
     (pkt->size) -= sizeof(struct routing_header);
