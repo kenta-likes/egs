@@ -61,6 +61,28 @@ miniroute_cache_t miniroute_cache_create(){
   return route_cache;
 }
 
+void miniroute_cache_destroy(miniroute_cache_t route_cache){
+  interrupt_level_t l;
+  dlink_node_t curr_node;
+  dlink_node_t tmp;
+
+  l = set_interrupt_level(DISABLED);
+  curr_node = route_cache->cache_list.hd;
+  
+  while (curr_node != NULL){
+    deregister_alarm( ((cache_entry_t)hash_table_get(route_cache->cache_table, curr_node->key))->route_alarm );
+    free(hash_table_get(route_cache->cache_table, curr_node->key));
+    hash_table_remove(route_cache->cache_table, curr_node->key);
+    tmp = curr_node->next;
+    free(curr_node);
+    curr_node = tmp;
+  }
+  hash_table_destroy(route_cache->cache_table);
+  free(route_cache);
+  return;
+  
+}
+
 int miniroute_cache_size(miniroute_cache_t route_cache){
   return route_cache->cache_list.len;
 }

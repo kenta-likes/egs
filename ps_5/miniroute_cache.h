@@ -18,6 +18,10 @@ typedef struct miniroute_cache* miniroute_cache_t;
 /*initializer function for route cache*/
 miniroute_cache_t miniroute_cache_create();
 
+/*destructor function*/
+void miniroute_cache_destroy(miniroute_cache_t route_cache);
+
+
 /*
  * returns number of elements
  * in this cache
