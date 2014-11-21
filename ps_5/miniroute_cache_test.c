@@ -18,9 +18,9 @@ int test_cache (int* arg) {
   test_cache = miniroute_cache_create();
 
   //create a new route
-  test_route = (miniroute_t)malloc(sizeof(struct miniroute));
+  test_route = (miniroute_t)calloc(1, sizeof(struct miniroute));
   test_route->len = 1;
-  test_route->route = (network_address_t*)malloc(sizeof(network_address_t));
+  test_route->route = (network_address_t*)calloc(1, sizeof(network_address_t));
 
   network_get_my_address(test_key);
   network_address_copy(test_key,test_route->route[0]);
@@ -43,8 +43,8 @@ int test_cache (int* arg) {
   for (i = 0; i < SIZE_OF_ROUTE_CACHE; i++){
     network_get_my_address(test_key);
     test_key[0] = i; //make unique key for each i
-    test_route = (miniroute_t)malloc(sizeof(struct miniroute)); //size 10 route
-    test_route->route = (network_address_t*)malloc(sizeof(network_address_t) * 10);
+    test_route = (miniroute_t)calloc(1, sizeof(struct miniroute)); //size 10 route
+    test_route->route = (network_address_t*)calloc(10, sizeof(network_address_t));
     test_route->len = 10;
     network_address_copy(test_key, test_route->route[0]);
     network_address_copy(test_key, test_route->route[1]);
@@ -71,8 +71,8 @@ int test_cache (int* arg) {
     //add 21st element for eviction, test
     network_get_my_address(test_key);
     test_key[0] = SIZE_OF_ROUTE_CACHE + i; //make another key
-    test_route = (miniroute_t)malloc(sizeof(struct miniroute)); //size 10 route
-    test_route->route = (network_address_t*)malloc(sizeof(network_address_t));
+    test_route = (miniroute_t)calloc(1, sizeof(struct miniroute)); //size 10 route
+    test_route->route = (network_address_t*)calloc(1, sizeof(network_address_t));
     test_route->len = 1;
     network_address_copy(test_key, test_route->route[0]);
     miniroute_cache_put(test_cache, test_key, test_route);

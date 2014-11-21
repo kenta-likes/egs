@@ -289,6 +289,20 @@ clock_handler(void* arg) {
   }
 }
 
+/*
+ * shift contents of buf to the LEFT by offset bytes.
+ * The number of contents shifted is denoted by
+ * bytes_shifted
+ * */
+void shift_by_n(char* buf, int offset, int bytes_shifted){
+  int i;
+  
+  for (i = 0; i < bytes_shifted; i++){
+    buf[i] = buf[i+offset];
+  }
+  return;
+}
+
 /**
  *  Network handler function which gets called whenever packet
  *  arrives. Handler disables interrupts for duration of function.
@@ -299,35 +313,80 @@ void
 network_handler(network_interrupt_arg_t* pkt){
   interrupt_level_t l;
   mini_header_t pkt_hdr;
+  struct routing_header* router_hdr;
   char protocol;
+  char* buf_ptr;
   
   printf("in network_handler\n");
   l = set_interrupt_level(DISABLED);
 
-  //first check if router packet is destined for us
-  
-  pkt_hdr = (mini_header_t)(&pkt->buffer);
-  protocol = pkt_hdr->protocol;
- 
-  if (protocol == PROTOCOL_MINIDATAGRAM) {
-    if (queue_append(pkt_q, pkt)){
-      //queue was not initialized
-      set_interrupt_level(l);
-      return;
-    }
+  if (pkt->size < 0){
     set_interrupt_level(l);
-    semaphore_V(pkt_available_sem); //wake up packet processor
     return;
   }
-  else if (protocol == PROTOCOL_MINISTREAM) {
-    printf("got a tcp packet\n");
-    minisocket_process_packet((void*)pkt);
-    set_interrupt_level(l);
+
+/*
+ *
+struct routing_header {
+	char routing_packet_type;		// the type of routing packet
+	char destination[8];			/ ultimate destination of routing packet
+	char id[4];						//identifier value for this broadcast (only applicable for discovery and route reply msgs, 0 otherwise
+	char ttl[4];					// number of hops until packet is destroyed (time to live)
+
+	char path_len[4];				// length of route, indicates the number of valid entries in the path array.
+									   This should be smaller than MAX_ROUTE_LENGTH
+	char path[MAX_ROUTE_LENGTH][8];	// contains the packed network addresses of each node in the route.
+									   The address of the source is stored in the first position, and the
+									   address of the destination is stored in the last position.
+};
+ */
+
+  //first check if router packet is destined for us
+  if ( (pkt->buffer)[1] == ROUTING_DATA && network_compare_network_addresses(pkt->sender, my_addr) ){
+  //if (miniroute_process_packet(pkt){
+    //send reply packet
+    buf_ptr = pkt->buffer;
+    router_hdr = (struct routing_header*)buf_ptr; //set header to data
+    ///router_hdr->routing_packet_type = ROUTING_REPLY;
+    //offset to path field. 1 + 8 + 4 + 4 + 4 = 21
+    memcpy(router_hdr->destination, buf_ptr + 21, 8);
+    //keep the same broadcast id
+    //router->ttl
+
+   
+ 
+    //pass packet on to tcp/udp 
+    //shift contents of pkt buf to overwrite router headers
+    shift_by_n(buf_ptr, sizeof(struct routing_header ), (pkt->size - sizeof(struct routing_header)) );
+    (pkt->size) -= sizeof(struct routing_header);
+    
+    
+    pkt_hdr = (mini_header_t)(&pkt->buffer);
+    protocol = pkt_hdr->protocol;
+   
+    if (protocol == PROTOCOL_MINIDATAGRAM) {
+      if (queue_append(pkt_q, pkt)){
+        //queue was not initialized
+        set_interrupt_level(l);
+        return;
+      }
+      set_interrupt_level(l);
+      semaphore_V(pkt_available_sem); //wake up packet processor
+      return;
+    }
+    else if (protocol == PROTOCOL_MINISTREAM) {
+      printf("got a tcp packet\n");
+      minisocket_process_packet((void*)pkt);
+      set_interrupt_level(l);
+    }
+    else {
+      free(pkt);
+      set_interrupt_level(l);
+    }   
   }
   else {
-    free(pkt);
-    set_interrupt_level(l);
-  }   
+
+  }
 }
 
 void

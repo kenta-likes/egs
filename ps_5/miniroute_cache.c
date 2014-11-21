@@ -50,7 +50,7 @@ void destroy_entry(void* arg);
 miniroute_cache_t miniroute_cache_create(){
   miniroute_cache_t route_cache;
 
-  route_cache = (miniroute_cache_t)malloc(sizeof(struct miniroute_cache));
+  route_cache = (miniroute_cache_t)calloc(1, sizeof(struct miniroute_cache));
   if (!route_cache){
     return NULL;
   }
@@ -75,28 +75,17 @@ void miniroute_cache_destroy(miniroute_cache_t route_cache){
   curr_node = route_cache->cache_list.hd;
   
   while (curr_node != NULL){
-    printf("1\n");
     deregister_alarm( ((cache_entry_t)hash_table_get(route_cache->cache_table, curr_node->key))->route_alarm );
-    printf("2\n");
+    free( ((cache_entry_t)hash_table_get(route_cache->cache_table, curr_node->key))->route->route );
+    free( ((cache_entry_t)hash_table_get(route_cache->cache_table, curr_node->key))->route );
     free(hash_table_get(route_cache->cache_table, curr_node->key));
-    printf("3\n");
     hash_table_remove(route_cache->cache_table, curr_node->key);
-    printf("4\n");
     tmp = curr_node->next;
-    printf("5\n");
     free(curr_node);
-    printf("6\n");
     curr_node = tmp;
-    printf("7\n");
-  }
-  printf("8\n");
-  if (!hash_table_get(route_cache->cache_table, key)){
-    printf("YES\n");
   }
   hash_table_destroy(route_cache->cache_table);
-  printf("9\n");
   free(route_cache);
-  printf("10\n");
   set_interrupt_level(l);
   return;
   
@@ -120,8 +109,6 @@ void destroy_entry(void* arg){
 
   //remove entry from hashtable. If element doesn't exist, function is safe
   hash_table_remove(entry_alarm->route_cache->cache_table, delete_node->key);
-
-
   if (delete_node->next == NULL || delete_node->prev == NULL){
     //check if this is a single node list
     if (entry_alarm->route_cache->cache_list.len == 1){
@@ -131,8 +118,6 @@ void destroy_entry(void* arg){
       free(delete_entry);
       entry_alarm->route_cache->cache_list.hd = NULL;
       entry_alarm->route_cache->cache_list.tl = NULL;
-      (entry_alarm->route_cache->cache_list.len)--;
-      //free(entry_alarm);
     }
     else { //remove head or tail
       if (delete_node->next == NULL){ //tail
@@ -142,9 +127,7 @@ void destroy_entry(void* arg){
         free(delete_entry->route->route);
         free(delete_entry->route);
         free(delete_entry);
-        (entry_alarm->route_cache->cache_list.len)--;
-        //free(entry_alarm);
-      }
+       }
       else { //head
         delete_node->next->prev = NULL;
         entry_alarm->route_cache->cache_list.hd = delete_node->next;
@@ -152,8 +135,6 @@ void destroy_entry(void* arg){
         free(delete_entry->route->route);
         free(delete_entry->route);
         free(delete_entry);
-        (entry_alarm->route_cache->cache_list.len)--;
-        //free(entry_alarm);
       }
     }
   }
@@ -164,9 +145,9 @@ void destroy_entry(void* arg){
     free(delete_entry->route->route);
     free(delete_entry->route);
     free(delete_entry);
-    (entry_alarm->route_cache->cache_list.len)--;
-    //free(entry_alarm);
   }
+  (entry_alarm->route_cache->cache_list.len)--;
+  free(entry_alarm);
   return;
 }
 
@@ -189,14 +170,19 @@ int miniroute_cache_put(miniroute_cache_t route_cache, network_address_t key, mi
     return -1;
   }
 
-  printf("entering miniroute_cache_put\n");
   l = set_interrupt_level(DISABLED);
+
+  //our cache is a set
+  if (hash_table_contains(route_cache->cache_table, key)){
+    set_interrupt_level(l);
+    return 0;
+  }
 
   //if cache full, remove entry from hashtable and list and deregister alarm
   if (route_cache->cache_list.len >= SIZE_OF_ROUTE_CACHE) {
     //deregister alarm. If alarm was already executed, then this function is a no-op
     deregister_alarm( ((cache_entry_t)hash_table_get(route_cache->cache_table, route_cache->cache_list.tl->key))->route_alarm);
-    evict_alarm = (cache_alarm_arg_t)malloc(sizeof(struct cache_alarm_arg));
+    evict_alarm = (cache_alarm_arg_t)calloc(1, sizeof(struct cache_alarm_arg));
     evict_alarm->route_cache = route_cache; //route_cache
     evict_alarm->node = route_cache->cache_list.tl; //save node info to alarm arg
     destroy_entry((void*)evict_alarm);
@@ -205,29 +191,26 @@ int miniroute_cache_put(miniroute_cache_t route_cache, network_address_t key, mi
   new_alarm = NULL;
 
   //create new entry
-  new_entry = (cache_entry_t)malloc(sizeof(struct cache_entry));
+  new_entry = (cache_entry_t)calloc(1, sizeof(struct cache_entry));
   if (!new_entry){
     set_interrupt_level(l);
-    printf("exiting miniroute_cache_put on FAILURE\n");
     return -1;
   }
   //create new node
   tmp = NULL;
-  tmp = (dlink_node_t)malloc(sizeof(struct dlink_node));
+  tmp = (dlink_node_t)calloc(1, sizeof(struct dlink_node));
   if (!tmp){
     free(new_entry);
     set_interrupt_level(l);
-    printf("exiting miniroute_cache_put on FAILURE\n");
     return -1; //error catch
   }
 
   //create new alarm arg
-  new_alarm = (cache_alarm_arg_t)malloc(sizeof(struct cache_alarm_arg));
+  new_alarm = (cache_alarm_arg_t)calloc(1, sizeof(struct cache_alarm_arg));
   if (!new_alarm){
     free(new_entry);
     free(tmp);
     set_interrupt_level(l);
-    printf("exiting miniroute_cache_put on FAILURE\n");
     return -1;
   }
 
@@ -255,7 +238,6 @@ int miniroute_cache_put(miniroute_cache_t route_cache, network_address_t key, mi
     free(tmp);
     free(new_alarm);
     set_interrupt_level(l);
-    printf("exiting miniroute_cache_put on FAILURE\n");
     return -1;
   }
   new_entry->route = val;
@@ -264,7 +246,6 @@ int miniroute_cache_put(miniroute_cache_t route_cache, network_address_t key, mi
 
   set_interrupt_level(l);
 
-  printf("exiting miniroute_cache_put on SUCCESS\n");
   return 0;
 }
 
@@ -276,19 +257,15 @@ int miniroute_cache_put(miniroute_cache_t route_cache, network_address_t key, mi
 miniroute_t miniroute_cache_get(miniroute_cache_t route_cache, network_address_t key){
   cache_entry_t entry;
 
-  printf("entering miniroute_cache_get\n");
   if (route_cache == NULL) {
-    printf("exiting miniroute_cache_get on FAILURE\n");
     return NULL;
   }
 
   entry = hash_table_get(route_cache->cache_table, key);
   if (entry == NULL){
-    printf("exiting miniroute_cache_get on FAILURE\n");
     return NULL;
   }
   else {
-    printf("exiting miniroute_cache_get on SUCCESS\n");
     return entry->route;
   }
   
