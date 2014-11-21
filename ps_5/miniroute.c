@@ -38,8 +38,7 @@ network_address_t my_addr;            // my address
 
 /* FUNC DEFS
  */
-void miniroute_initialize()
-{
+void miniroute_initialize() {
   route_cache = miniroute_cache_create();
   dcb_table = hash_table_create();
   curr_discovery_pkt_id = 1;
@@ -51,10 +50,12 @@ void miniroute_initialize()
  */
 void miniroute_resend(void* arg) {
   char tmp;
-
   resend_arg_t params = (resend_arg_t)arg;
+
+  printf("entering miniroute_resend\n");
   params->try_count++;
   if (params->try_count >= 3) {
+    printf("timed out when trying discover a route\n");
     params->control_block->resend_alarm = NULL;
     params->control_block->alarm_arg = NULL;
     semaphore_V(params->control_block->route_ready); 
@@ -62,6 +63,7 @@ void miniroute_resend(void* arg) {
   }
   //assign fresh id
   pack_unsigned_int(params->hdr->id, curr_discovery_pkt_id++);
+  printf("sending another DISCOVERY pkt\n");
   network_bcast_pkt(sizeof(struct routing_header), (char*)(params->hdr), 0, &tmp);
   params->control_block->resend_alarm = set_alarm(120, miniroute_resend, 
       params->control_block->alarm_arg, minithread_time());  
@@ -76,7 +78,8 @@ miniroute_t miniroute_discover_route(network_address_t dest) {
   miniroute_t path;
   dcb_t control_block;
   struct routing_header hdr;
- 
+
+  printf("entering miniroute_discover_route\n"); 
   l = set_interrupt_level(DISABLED);
   path = miniroute_cache_get(route_cache, dest);
   if (path != NULL) {
@@ -108,9 +111,11 @@ miniroute_t miniroute_discover_route(network_address_t dest) {
     control_block->resend_alarm = NULL;
     control_block->alarm_arg = NULL;
     hash_table_add(dcb_table, dest, control_block);
-  }
+    printf("made a NEW discover control block\n"); 
+    }
   control_block = hash_table_get(dcb_table, dest);
   if (!control_block) {
+    printf("ERROR: could not find discover control block\n");
     set_interrupt_level(l);
     return NULL;
   }
@@ -125,6 +130,7 @@ miniroute_t miniroute_discover_route(network_address_t dest) {
     control_block->count--;
     semaphore_V(control_block->mutex);
     set_interrupt_level(l);
+    printf("exiting miniroute_discover_route on SUCCESS\n"); 
     return path;
   }
   else {
@@ -141,6 +147,7 @@ miniroute_t miniroute_discover_route(network_address_t dest) {
     arg.control_block = control_block;    
     control_block->alarm_arg = &arg; 
 
+    printf("sending first DISCOVERY pkt\n");
     if (network_bcast_pkt(sizeof(struct routing_header), (char*)(&hdr), 0, &tmp) == -1) {
       //error
       control_block->count--;
@@ -158,6 +165,7 @@ miniroute_t miniroute_discover_route(network_address_t dest) {
     control_block->count--;
     semaphore_V(control_block->mutex);
     set_interrupt_level(l);
+    printf("exiting miniroute_discover_route on SUCCESS\n"); 
     return path;
   }
 }
@@ -165,13 +173,29 @@ miniroute_t miniroute_discover_route(network_address_t dest) {
 /* sends a miniroute packet, automatically discovering the path if necessary. 
  * See description in the .h file.
  */
-int miniroute_send_pkt(network_address_t dest_address, int hdr_len, char* hdr, int data_len, char* data) {
+int miniroute_send_pkt(network_address_t dest_address, int hdr_len, 
+                        char* hdr, int data_len, char* data) {
   interrupt_level_t l;
   miniroute_t path;
   dcb_t control_block;
-
+  struct routing_header new_hdr;
+  int i;
+  int path_len;
+  int new_data_len;
+  char* new_data;
+  int bytes_sent;
+  
+  printf("entering miniroute_send_pkt\n");
+  if (hdr_len < 0 || data_len < 0 || hdr == NULL || data == NULL) {
+    printf("invalid params\n");
+    return -1;
+  }
   path = miniroute_discover_route(dest_address);
-  path += 1; //just to make compiler happy
+
+  if (path == NULL) {
+    return -1;
+  }
+
   l = set_interrupt_level(DISABLED);
   control_block = hash_table_get(dcb_table, dest_address);
   if (control_block != NULL && control_block->count == 0) {
@@ -180,9 +204,40 @@ int miniroute_send_pkt(network_address_t dest_address, int hdr_len, char* hdr, i
     semaphore_destroy(control_block->route_ready);
     hash_table_remove(dcb_table, dest_address);
     free(control_block);
+    printf("destroyed a discovery control block\n");
   }
   set_interrupt_level(l);
-  return 0;
+
+  //JUST DO IT
+  new_hdr.routing_packet_type = ROUTING_DATA;
+  pack_address(new_hdr.destination, dest_address);
+  pack_unsigned_int(new_hdr.ttl, MAX_ROUTE_LENGTH);
+  pack_unsigned_int(new_hdr.id, 0);
+  pack_unsigned_int(new_hdr.path_len, path->len);
+  if (path->len > MAX_ROUTE_LENGTH) {
+    path_len = MAX_ROUTE_LENGTH; 
+  }
+  else {
+    path_len = path->len;
+  }
+  for (i = 0; i < path_len; i++) {
+    pack_address(new_hdr.path[i], path->route[i]);
+  }
+  new_data_len = hdr_len + data_len;
+  new_data = (char*)malloc(new_data_len);
+  memcpy(new_data, hdr, hdr_len);
+  memcpy(new_data+hdr_len, data, data_len);
+  bytes_sent = network_send_pkt(path->route[1], sizeof(struct routing_header), 
+      (char*)&new_hdr, new_data_len, new_data);
+  free(new_data);
+  if ((bytes_sent - hdr_len) < 0) {
+    printf("exiting miniroute_send_pkt on FAILURE\n");
+    return -1;
+  }
+  else {
+    printf("exiting miniroute_send_pkt on SUCCESS\n");
+    return (bytes_sent - hdr_len);
+  }
 }
 
 
