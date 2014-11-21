@@ -105,13 +105,14 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
       miniroute_cache_put(route_cache, src_addr, new_path);
     } //added new route to cache
   }
-  else {
+  else if (pkt_ttl <= 0) {
+    free(pkt);
+    return 0;
+  }
+  else if (pkt_hdr->routing_packet_type != ROUTING_ROUTE_DISCOVERY) {
     //different
-    if (pkt_ttl <= 0) {
-      free(pkt);
-      return 0;
-    }
-    // check from 2nd to second to last address
+
+    //check from 2nd to second to last address
     found = 0;
     for (i = 1; i < path_len - 2; i++) {
       unpack_address(tmp_addr, pkt_hdr->path[i]);
@@ -169,6 +170,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
     if (network_compare_network_addresses(my_addr, dst_addr)) {
       //same
       control_block = hash_table_get(dcb_table, src_addr);
+      semaphore_V(control_block->route_ready);
     }
     else {
       //different
