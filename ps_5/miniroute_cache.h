@@ -19,6 +19,12 @@ typedef struct miniroute_cache* miniroute_cache_t;
 miniroute_cache_t miniroute_cache_create();
 
 /*
+ * returns number of elements
+ * in this cache
+ * */
+int miniroute_cache_size(miniroute_cache_t route_cache);
+
+/*
  * returns the route associated with a given address,
  * if it exists in the cache. If not, it will return NULL
  * Updates the alarm if called and exists
