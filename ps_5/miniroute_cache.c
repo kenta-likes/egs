@@ -3,7 +3,7 @@
 #include "interrupts.h"
 #include "minithread.h"
 
-#define CACHE_TIME 3000.0f //3000 millisconds = 3 seconds.
+#define CACHE_TIME 30.0f //3 seconds = 100 milliseconds(cycle time) * 30
 
 //node type for storing addresses
 typedef struct dlink_node{
