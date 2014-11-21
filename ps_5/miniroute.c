@@ -136,24 +136,11 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
       return 1;
     }
     else {
-      //different
-      //check ttl
-      //scan to check if i am in list
-      //if yes then pass along, else discard
       //skip packet type, shouldn't change
       //skip destination, shouldn't change
       //skip id, shouldn't change
-      //subtract ttl
-      //add path_len
-      //add thyself to path, iff not already there
-      /*
-      pack_unsigned_int(hdr.ttl, pkt_ttl - 1);
-      pack_unsigned_int(hdr.path_len, path_len + 1);
-      for (i = 0; i < path->len; i++) {
-        pack_address(hdr.path[path_len], path->route[]);
-      }
-      network_send_pkt(sizeof(struct routing_header), (char*)(&hdr), 0, &tmp);
-      */
+      pack_unsigned_int(pkt_hdr->ttl, pkt_ttl - 1); //subtract ttl
+      network_send_pkt(nxt_addr, sizeof(struct routing_header), (char*)pkt_hdr, 0, &tmp);
     }
     break;
 
@@ -178,6 +165,21 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
       //scan to check if i am in list
       //if yes then discard
       //else append to path vector and broadcast
+      //
+      //scan to check if i am in list
+      //if yes then pass along, else discard
+      for (i = 1; i < path_len - 2; i++) {
+        unpack_address(pkt_hdr->path[i], tmp_addr);
+        if (network_compare_network_addresses(my_addr, tmp_addr)) {
+          free(pkt);
+          return 0;
+        }
+      }
+      //add thyself to path, iff not already there
+      pack_address(hdr.path[path_len], my_addr);
+      pack_unsigned_int(hdr.path_len, path_len + 1); //add path_len
+      pack_unsigned_int(pkt_hdr->ttl, pkt_ttl - 1); //subtract ttl
+      network_bcast_pkt(sizeof(struct routing_header), (char*)pkt_hdr, 0, &tmp); //send to neighbors
     }
     break;
 
@@ -192,6 +194,12 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
       //check ttl
       //scan to check if i am in list
       //if yes then pass along, else discard
+      //
+      //skip packet type, shouldn't change
+      //skip destination, shouldn't change
+      //skip id, shouldn't change
+      pack_unsigned_int(pkt_hdr->ttl, pkt_ttl - 1); //subtract ttl
+      network_send_pkt(nxt_addr, sizeof(struct routing_header), (char*)pkt_hdr, 0, &tmp);
     }
     break;
 
