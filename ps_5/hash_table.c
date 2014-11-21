@@ -62,6 +62,7 @@ int hash_table_resize(hash_table_t ht, int grow) {
   unsigned short idx;
   int i;
 
+  printf("entering resize\n");
   old_capacity = ht->capacity;
   old_array = ht->array;
 
@@ -221,13 +222,18 @@ int hash_table_destroy(hash_table_t ht) {
   ht_node_t curr;
   ht_node_t temp;
 
+  printf("entering hash_table_destroy\n");
   if (ht == NULL) {
+    printf("exiting hash_table_destroy on FAILURE\n");
     return -1;
   }
-
+  printf("capacity: %d\n", ht->capacity);
+  printf("size: %d\n", ht->size);
   array_len = ht->capacity;
   for (i = 0; i < array_len; i++) {
+    printf("in for loop, %dth iteration of\n", i);
     if (ht->array[i]) {
+      printf("removing entries at idx %d", i);
       curr = ht->array[i];
       while (curr != NULL) {
         temp = curr;
@@ -236,9 +242,11 @@ int hash_table_destroy(hash_table_t ht) {
       } 
     }
   }
+  printf("exit for loop\n");
   free(ht->array);
   free(ht);
   
+  printf("exiting hash_table_destroy on SUCCESS\n");
   return 0;
 }
 
