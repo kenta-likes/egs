@@ -35,8 +35,7 @@ struct miniport{
  *  Global variables
  */
 
-network_address_t my_addr;      // my address
-
+network_address_t my_addr;      // my address 
 miniport_t* miniport_array;     // this array contains pointers to miniports
                                 // where the index corresponds to the port number
                                 // null if the port at that index has not been created
