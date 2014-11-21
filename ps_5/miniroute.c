@@ -88,6 +88,11 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
     //same
     if (!miniroute_cache_get(route_cache, src_addr)) {
       //not in cache 
+      if (pkt_hdr->routing_packet_type == ROUTING_ROUTE_DISCOVERY) {
+        //add myself to the path vector
+        pack_address(pkt_hdr->path[path_len], my_addr); 
+        pack_unsigned_int(pkt_hdr->path_len, path_len+1);
+      }
       new_route = (network_address_t*)calloc(path_len, sizeof(network_address_t));
       if (new_route == NULL) {
         free(pkt);
