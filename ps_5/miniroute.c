@@ -138,6 +138,20 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
       //check ttl
       //scan to check if i am in list
       //if yes then pass along, else discard
+      //skip packet type, shouldn't change
+      //skip destination, shouldn't change
+      //skip id, shouldn't change
+      //subtract ttl
+      //add path_len
+      //add thyself to path, iff not already there
+      /*
+      pack_unsigned_int(hdr.ttl, pkt_ttl - 1);
+      pack_unsigned_int(hdr.path_len, path_len + 1);
+      for (i = 0; i < path->len; i++) {
+        pack_address(hdr.path[path_len], path->route[]);
+      }
+      network_send_pkt(sizeof(struct routing_header), (char*)(&hdr), 0, &tmp);
+      */
     }
     break;
 
