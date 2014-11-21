@@ -79,6 +79,7 @@ void miniroute_cache_destroy(miniroute_cache_t route_cache){
   }
   hash_table_destroy(route_cache->cache_table);
   free(route_cache);
+  set_interrupt_level(l);
   return;
   
 }
@@ -113,7 +114,7 @@ void destroy_entry(void* arg){
       entry_alarm->route_cache->cache_list.hd = NULL;
       entry_alarm->route_cache->cache_list.tl = NULL;
       (entry_alarm->route_cache->cache_list.len)--;
-      //free(entry_alarm);
+      free(entry_alarm);
     }
     else { //remove head or tail
       if (delete_node->next == NULL){ //tail
@@ -124,7 +125,7 @@ void destroy_entry(void* arg){
         free(delete_entry->route);
         free(delete_entry);
         (entry_alarm->route_cache->cache_list.len)--;
-        //free(entry_alarm);
+        free(entry_alarm);
       }
       else { //head
         delete_node->next->prev = NULL;
@@ -134,7 +135,7 @@ void destroy_entry(void* arg){
         free(delete_entry->route);
         free(delete_entry);
         (entry_alarm->route_cache->cache_list.len)--;
-        //free(entry_alarm);
+        free(entry_alarm);
       }
     }
   }
@@ -146,7 +147,7 @@ void destroy_entry(void* arg){
     free(delete_entry->route);
     free(delete_entry);
     (entry_alarm->route_cache->cache_list.len)--;
-    //free(entry_alarm);
+    free(entry_alarm);
   }
   return;
 }
