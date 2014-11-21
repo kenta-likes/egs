@@ -335,7 +335,6 @@ network_handler(network_interrupt_arg_t* pkt){
     shift_by_n(buf_ptr, sizeof(struct routing_header ), (pkt->size - sizeof(struct routing_header)) );
     (pkt->size) -= sizeof(struct routing_header);
     
-    
     pkt_hdr = (mini_header_t)(&pkt->buffer);
     protocol = pkt_hdr->protocol;
    
