@@ -324,8 +324,10 @@ network_handler(network_interrupt_arg_t* pkt){
     return;
   }
 
+  printf("PACKET passed checks\n");
   //first check if router packet is destined for us
   if (miniroute_process_packet(pkt)){
+    printf("PACKET IS HURRR\n");
  
     //pass packet on to tcp/udp 
     buf_ptr = pkt->buffer;
@@ -356,6 +358,9 @@ network_handler(network_interrupt_arg_t* pkt){
       free(pkt);
       set_interrupt_level(l);
     }   
+  }
+  else {
+    set_interrupt_level(l);
   }
 }
 
