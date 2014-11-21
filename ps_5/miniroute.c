@@ -71,7 +71,9 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
   dcb_t control_block;
   
   
+  printf("entering miniroute_process_packet\n");
   if (pkt == NULL || pkt->size < sizeof(struct routing_header)) {
+    printf("exiting miniroute_process_packet on INVALID PARAMS\n");
     return 0;
   }
   
@@ -89,6 +91,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
       new_route = (network_address_t*)calloc(path_len, sizeof(network_address_t));
       if (new_route == NULL) {
         free(pkt);
+        printf("exiting miniroute_process_packet on CALLOC ERROR\n");
         return 0;
       }
       for (i = 0; i < path_len; i++) {
@@ -99,6 +102,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
       if (new_path == NULL) {
         free(pkt);
         free(new_route);
+        printf("exiting miniroute_process_packet on CALLOC ERROR\n");
         return 0;
       }
       new_path->route = new_route;
@@ -108,6 +112,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
   }
   else if (pkt_ttl <= 0) {
     free(pkt);
+    printf("exiting miniroute_process_packet on TTL ERROR\n");
     return 0;
   }
   else if (pkt_hdr->routing_packet_type != ROUTING_ROUTE_DISCOVERY) {
@@ -131,8 +136,10 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
 
   switch (pkt_hdr->routing_packet_type) {
   case ROUTING_DATA:
+    printf("got a DATA pkt\n");
     if (network_compare_network_addresses(my_addr, dst_addr)) {
       //same
+      printf("exiting miniroute_process_packet on DATA PKT\n"); 
       return 1;
     }
     else {
@@ -145,6 +152,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
     break;
 
   case ROUTING_ROUTE_DISCOVERY:
+    printf("got a DISCOVERY pkt\n");
     if (network_compare_network_addresses(my_addr, dst_addr)) {
       //same  
       path = miniroute_cache_get(route_cache, src_addr);
@@ -172,6 +180,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
         unpack_address(pkt_hdr->path[i], tmp_addr);
         if (network_compare_network_addresses(my_addr, tmp_addr)) {
           free(pkt);
+          printf("exiting miniroute_process_packet on BROADCAST LOOP\n");
           return 0;
         }
       }
@@ -184,6 +193,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
     break;
 
   case ROUTING_ROUTE_REPLY:
+    printf("got a REPLY pkt\n");
     if (network_compare_network_addresses(my_addr, dst_addr)) {
       //same
       control_block = hash_table_get(dcb_table, src_addr);
@@ -207,6 +217,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
     //WTFFF???
     break;
   }    
+  printf("exiting miniroute_process_packet on SUCCESS\n"); 
   free(pkt);
   return 0;
 }
