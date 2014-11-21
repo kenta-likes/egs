@@ -85,13 +85,12 @@ int test_cache (int* arg) {
   for (i = 0; i < 5; i++){
     network_get_my_address(test_key);
     test_key[0] = i; //try to get the first element again
-
     assert(miniroute_cache_get(test_cache, test_key) == NULL);
   }
+
   //check the 6th entry should not be evicted
   network_get_my_address(test_key);
   test_key[0] = 6; //try to get the first element again
-
   assert(miniroute_cache_get(test_cache, test_key) != NULL);
 
   printf("Eviction........PASS\n");
