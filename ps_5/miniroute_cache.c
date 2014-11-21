@@ -61,23 +61,22 @@ miniroute_cache_t miniroute_cache_create(){
   return route_cache;
 }
 
+int miniroute_cache_size(miniroute_cache_t route_cache){
+  return route_cache->cache_list.len;
+}
+
 /* destroys an entry from the hashtable,
- * removes the node in the cache's list,
- * and deregisters the alarm associated
+ * removes the node in the cache's list
  * with it.*/
 void destroy_entry(void* arg){
   cache_alarm_arg_t entry_alarm;
   dlink_node_t delete_node;
-  cache_entry_t entry;
+  cache_entry_t delete_entry;
 
   entry_alarm = (cache_alarm_arg_t)arg; //alarm info stored
   delete_node = entry_alarm->node; //node to be removed from cache list
+  delete_entry = hash_table_get(entry_alarm->route_cache->cache_table, delete_node->key);
 
-  //deregister alarm. If alarm was already executed, then this function is a no-op
-  entry = hash_table_get(entry_alarm->route_cache->cache_table, delete_node->key);
-  if (entry){ 
-    deregister_alarm(entry->route_alarm);
-  }
   //remove entry from hashtable. If element doesn't exist, function is safe
   hash_table_remove(entry_alarm->route_cache->cache_table, delete_node->key);
 
@@ -86,22 +85,34 @@ void destroy_entry(void* arg){
     //check if this is a single node list
     if (entry_alarm->route_cache->cache_list.len == 1){
       free(delete_node);
+      free(delete_entry->route->route);
+      free(delete_entry->route);
+      free(delete_entry);
       entry_alarm->route_cache->cache_list.hd = NULL;
       entry_alarm->route_cache->cache_list.tl = NULL;
       (entry_alarm->route_cache->cache_list.len)--;
+      //free(entry_alarm);
     }
     else { //remove head or tail
       if (delete_node->next == NULL){ //tail
         delete_node->prev->next = NULL;
         entry_alarm->route_cache->cache_list.tl = delete_node->prev;
         free(delete_node);
+        free(delete_entry->route->route);
+        free(delete_entry->route);
+        free(delete_entry);
         (entry_alarm->route_cache->cache_list.len)--;
+        //free(entry_alarm);
       }
       else { //head
         delete_node->next->prev = NULL;
         entry_alarm->route_cache->cache_list.hd = delete_node->next;
         free(delete_node);
+        free(delete_entry->route->route);
+        free(delete_entry->route);
+        free(delete_entry);
         (entry_alarm->route_cache->cache_list.len)--;
+        //free(entry_alarm);
       }
     }
   }
@@ -109,7 +120,11 @@ void destroy_entry(void* arg){
     delete_node->prev->next = delete_node->next;
     delete_node->next->prev = delete_node->prev;
     free(delete_node);
+    free(delete_entry->route->route);
+    free(delete_entry->route);
+    free(delete_entry);
     (entry_alarm->route_cache->cache_list.len)--;
+    //free(entry_alarm);
   }
   return;
 }
@@ -126,17 +141,22 @@ int miniroute_cache_put(miniroute_cache_t route_cache, network_address_t key, mi
   interrupt_level_t l;
   dlink_node_t tmp;
   cache_entry_t new_entry;
-  struct cache_alarm_arg arg; //struct on stack
   cache_alarm_arg_t new_alarm;
+  cache_alarm_arg_t evict_alarm;
 
   l = set_interrupt_level(DISABLED);
 
   //if cache full, remove entry from hashtable and list and deregister alarm
   if (route_cache->cache_list.len >= SIZE_OF_ROUTE_CACHE) {
-    arg.route_cache = route_cache; //route_cache
-    arg.node = route_cache->cache_list.tl; //save node info to arg
-    destroy_entry((void*)&arg);
+    //deregister alarm. If alarm was already executed, then this function is a no-op
+    deregister_alarm( ((cache_entry_t)hash_table_get(route_cache->cache_table, route_cache->cache_list.tl->key))->route_alarm);
+    evict_alarm = (cache_alarm_arg_t)malloc(sizeof(struct cache_alarm_arg));
+    evict_alarm->route_cache = route_cache; //route_cache
+    evict_alarm->node = route_cache->cache_list.tl; //save node info to alarm arg
+    destroy_entry((void*)evict_alarm);
+    evict_alarm = NULL;
   }
+  new_alarm = NULL;
 
   //create new entry
   new_entry = (cache_entry_t)malloc(sizeof(struct cache_entry));
@@ -154,7 +174,7 @@ int miniroute_cache_put(miniroute_cache_t route_cache, network_address_t key, mi
   }
 
   //create new alarm arg
-  new_alarm = (cache_alarm_arg_t)malloc(sizeof(cache_alarm_arg_t));
+  new_alarm = (cache_alarm_arg_t)malloc(sizeof(struct cache_alarm_arg));
   if (!new_alarm){
     free(new_entry);
     free(tmp);
@@ -181,7 +201,7 @@ int miniroute_cache_put(miniroute_cache_t route_cache, network_address_t key, mi
 
   //register the alarm
   new_entry->route_alarm = set_alarm(CACHE_TIME, destroy_entry, (void*)new_alarm, minithread_time());
-  if (!new_entry->route_alarm){
+  if (!(new_entry->route_alarm)){
     free(new_entry);
     free(tmp);
     free(new_alarm);
@@ -203,5 +223,14 @@ int miniroute_cache_put(miniroute_cache_t route_cache, network_address_t key, mi
  * if it exists in the cache. If not, it will return NULL
  * */
 miniroute_t miniroute_cache_get(miniroute_cache_t route_cache, network_address_t key){
-  return hash_table_get(route_cache->cache_table, key);
+  cache_entry_t entry;
+
+  entry = hash_table_get(route_cache->cache_table, key);
+  if (entry == NULL){
+    return NULL;
+  }
+  else {
+    return entry->route;
+  }
+  
 }
