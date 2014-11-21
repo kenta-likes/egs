@@ -4,7 +4,7 @@
 #include "minisocket.h"
 #include <stdlib.h>
 #include <stdio.h>
-
+#include "miniroute.h"
 
 typedef enum state {LISTEN = 1, CONNECTING, CONNECT_WAIT, MSG_WAIT, 
     CLOSE_SEND, CLOSE_RCV, CONNECTED, EXIT} state;
@@ -65,7 +65,7 @@ void minisocket_send_ctrl_to(char type, minisocket_t sock, minisocket_error* err
   pack_unsigned_int(pkt.seq_number, sock->curr_seq);
   pack_unsigned_int(pkt.ack_number, sock->curr_ack);
   
-  if (network_send_pkt(to_addr, sizeof(pkt), 
+  if (miniroute_send_pkt(to_addr, sizeof(pkt), 
       (char*)&pkt, 0, (char*)&pkt) == -1) {
     *error = SOCKET_SENDERROR;
   }  
@@ -90,7 +90,7 @@ void minisocket_send_ctrl(char type, minisocket_t sock, minisocket_error* error)
   pack_unsigned_int(pkt.seq_number, sock->curr_seq);
   pack_unsigned_int(pkt.ack_number, sock->curr_ack);
   
-  if (network_send_pkt(sock->dst_addr, sizeof(pkt), 
+  if (miniroute_send_pkt(sock->dst_addr, sizeof(pkt), 
       (char*)&pkt, 0, (char*)&pkt) == -1) {
     *error = SOCKET_SENDERROR;
   }  
@@ -114,7 +114,7 @@ void minisocket_send_data(minisocket_t sock, unsigned int data_len, char* data, 
   pack_unsigned_int(pkt.seq_number, sock->curr_seq);
   pack_unsigned_int(pkt.ack_number, sock->curr_ack);
   
-  if (network_send_pkt(sock->dst_addr, sizeof(pkt), 
+  if (miniroute_send_pkt(sock->dst_addr, sizeof(pkt), 
       (char*)&pkt, data_len, data)  == -1) {
     *error = SOCKET_SENDERROR;
   }
