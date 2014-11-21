@@ -91,7 +91,8 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
       if (pkt_hdr->routing_packet_type == ROUTING_ROUTE_DISCOVERY) {
         //add myself to the path vector
         pack_address(pkt_hdr->path[path_len], my_addr); 
-        pack_unsigned_int(pkt_hdr->path_len, path_len+1);
+        path_len++;
+        pack_unsigned_int(pkt_hdr->path_len, path_len);
       }
       new_route = (network_address_t*)calloc(path_len, sizeof(network_address_t));
       if (new_route == NULL) {
@@ -157,8 +158,8 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
     break;
 
   case ROUTING_ROUTE_DISCOVERY:
-    printf("got a DISCOVERY pkt\n");
     if (network_compare_network_addresses(my_addr, dst_addr)) {
+      printf("got a DISCOVERY pkt, for me\n");
       //same  
       path = miniroute_cache_get(route_cache, src_addr);
 
@@ -170,9 +171,18 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
       for (i = 0; i < path->len; i++) {
         pack_address(hdr.path[i], path->route[i]);
       }
+      printf("my addr is (%i,%i)\n", my_addr[0], my_addr[1]);
+      printf("source addr is (%i,%i)\n", src_addr[0], src_addr[1]);
+      printf("dst addr is (%i,%i)\n", dst_addr[0], dst_addr[1]);
+      for (i = 0 ; i < path->len; i++){
+        unpack_address(hdr.path[i], tmp_addr);
+        printf("->(%i,%i)", tmp_addr[0], tmp_addr[1]);
+      }
+      printf("\n");
       network_send_pkt(path->route[1], sizeof(struct routing_header), (char*)(&hdr), 0, &tmp);
     }
     else {
+      printf("got a DISCOVERY pkt, for someone else\n");
       //different
       //check ttl
       //scan to check if i am in list
@@ -189,7 +199,6 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
           return 0;
         }
       }
-      //add thyself to path, iff not already there
       pack_address(hdr.path[path_len], my_addr);
       pack_unsigned_int(hdr.path_len, path_len + 1); //add path_len
       pack_unsigned_int(pkt_hdr->ttl, pkt_ttl - 1); //subtract ttl

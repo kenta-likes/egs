@@ -74,7 +74,6 @@ transmit(int* arg) {
 
 int
 main(int argc, char** argv) {
-
     short fromport, toport;
     fromport = atoi(argv[1]);
     toport = atoi(argv[2]);
