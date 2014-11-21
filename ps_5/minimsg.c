@@ -5,6 +5,7 @@
 #include "interrupts.h"
 #include "miniheader.h"
 #include <stdlib.h>
+#include "miniroute.h"
 
 #define UNBOUND_PORT_START 0 
 #define BOUND_PORT_START 32768
@@ -315,7 +316,7 @@ miniport_destroy(miniport_t miniport)
  * system, it needs to know the sender's listening port (specified by local_unbound_port).
  * The msg parameter is a pointer to a data payload that the user wishes to send and does not
  * include a network header; your implementation of minimsg_send must construct the header
- * before calling network_send_pkt(). The return value of this function is the number of
+ * before calling miniroute_send_pkt(). The return value of this function is the number of
  * data payload bytes sent not inclusive of the header. Returns -1 on error.
  * Fails if msg is too long. 
  */
@@ -350,7 +351,7 @@ minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg
   pack_address(hdr.destination_address, local_bound_port->u.bound.dest_addr);
   pack_unsigned_short(hdr.destination_port, local_bound_port->u.bound.dest_num);
   
-  if (network_send_pkt(dst_addr, sizeof(hdr), (char*)&hdr, len, msg)) {
+  if (miniroute_send_pkt(dst_addr, sizeof(hdr), (char*)&hdr, len, msg)) {
     return -1;
   }
   return len;
