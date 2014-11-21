@@ -52,6 +52,14 @@ void miniroute_initialize();
 int miniroute_send_pkt(network_address_t dest_address, int hdr_len, char* hdr, int data_len, char* data);
 
 
+/* Takes in a routing packet and does error checking.
+ * Adds it to the cache if this packet was destined for us. 
+ * Returns 1 if this packet has data to be passed along,
+ * O otherwise.
+ */
+int miniroute_process_packet(network_interrupt_arg_t* pkt);
+
+
 /* hash function that generates an unsigned short integer value from a given network address. This value will
  * range between 0 and 65520 (almost the full range of an unsigned short), and you must manually scale or
  * rehash this value into the range you want. 

@@ -324,37 +324,8 @@ network_handler(network_interrupt_arg_t* pkt){
     return;
   }
 
-/*
- *
-struct routing_header {
-	char routing_packet_type;		// the type of routing packet
-	char destination[8];			/ ultimate destination of routing packet
-	char id[4];						//identifier value for this broadcast (only applicable for discovery and route reply msgs, 0 otherwise
-	char ttl[4];					// number of hops until packet is destroyed (time to live)
-
-	char path_len[4];				// length of route, indicates the number of valid entries in the path array.
-									   This should be smaller than MAX_ROUTE_LENGTH
-	char path[MAX_ROUTE_LENGTH][8];	// contains the packed network addresses of each node in the route.
-									   The address of the source is stored in the first position, and the
-									   address of the destination is stored in the last position.
-};
- */
-
   //first check if router packet is destined for us
-  if ( (pkt->buffer)[1] == ROUTING_DATA && network_compare_network_addresses(pkt->sender, my_addr) ){
-  //if (miniroute_process_packet(pkt){
-    //send reply packet
-    buf_ptr = pkt->buffer;
-    buf_ptr[0] = ROUTING_REPLY;
-    buf_ptr += 1;
-    network_copybuf_ptr
-    //router_hdr = (struct routing_header*)buf_ptr; //set header to data
-    //offset to path field. 1 + 8 + 4 + 4 + 4 = 21
-    memcpy(router_hdr->destination, buf_ptr + 21, 8);
-    //keep the same broadcast id
-    //router->ttl
-
-   
+  if (miniroute_process_packet(pkt)){
  
     //pass packet on to tcp/udp 
     buf_ptr = pkt->buffer;
@@ -385,9 +356,6 @@ struct routing_header {
       free(pkt);
       set_interrupt_level(l);
     }   
-  }
-  else {
-
   }
 }
 
