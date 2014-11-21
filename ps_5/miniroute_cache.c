@@ -67,9 +67,6 @@ void miniroute_cache_destroy(miniroute_cache_t route_cache){
   interrupt_level_t l;
   dlink_node_t curr_node;
   dlink_node_t tmp;
-  network_address_t key;
-  key[0] = 0;
-  key[1] = 0;
 
   l = set_interrupt_level(DISABLED);
   curr_node = route_cache->cache_list.hd;

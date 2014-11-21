@@ -5,6 +5,7 @@
 #include "alarm.h"
 #include "minithread.h"
 #include "miniheader.h"
+#include "network.h"
 
 /* TYPE DEFS
  */
@@ -53,10 +54,10 @@ void miniroute_initialize() {
  */
 int miniroute_process_packet(network_interrupt_arg_t* pkt) {
   struct routing_header* pkt_hdr = NULL;
-  network_address_t tmp_addr = NULL;
-  network_address_t src_addr = NULL;
-  network_address_t dst_addr = NULL;
-  network_address_t nxt_addr = NULL;
+  network_address_t tmp_addr;
+  network_address_t src_addr;
+  network_address_t dst_addr;
+  network_address_t nxt_addr;
   unsigned int discovery_pkt_id;
   unsigned int pkt_ttl;
   unsigned int path_len;
@@ -71,15 +72,15 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
   
   
   if (pkt == NULL || pkt->size < sizeof(struct routing_header)) {
-    return;
+    return 0;
   }
   
   pkt_hdr = (struct routing_header*)pkt->buffer;
-  unpack_address(dst_addr, pkt_hdr->destination);
+  unpack_address(pkt_hdr->destination, dst_addr);
   discovery_pkt_id = unpack_unsigned_int(pkt_hdr->id);
   pkt_ttl = unpack_unsigned_int(pkt_hdr->ttl);
   path_len = unpack_unsigned_int(pkt_hdr->path_len);
-  unpack_address(src_addr, pkt_hdr->path[0]);
+  unpack_address(pkt_hdr->path[0], src_addr);
 
   if (network_compare_network_addresses(my_addr, dst_addr)) {
     //same
@@ -91,8 +92,8 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
         return 0;
       }
       for (i = 0; i < path_len; i++) {
-        unpack_address(tmp_addr, pkt_hdr->path[path_len - i - 1]);
-        network_copy_address(tmp_addr, new_route[i]);
+        unpack_address(pkt_hdr->path[path_len - i - 1], tmp_addr);
+        network_address_copy(tmp_addr, new_route[i]);
       }
       new_path = (miniroute_t)calloc(1, sizeof(struct miniroute));
       if (new_path == NULL) {
@@ -115,9 +116,9 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
     //check from 2nd to second to last address
     found = 0;
     for (i = 1; i < path_len - 2; i++) {
-      unpack_address(tmp_addr, pkt_hdr->path[i]);
-      if (network_compare_network_address(my_addr, tmp_addr)) {
-        unpack_address(nxt_addr, pkt_hdr->path[i+1]);
+      unpack_address(pkt_hdr->path[i], tmp_addr);
+      if (network_compare_network_addresses(my_addr, tmp_addr)) {
+        unpack_address(pkt_hdr->path[i+1], nxt_addr);
         found = 1;
         break; 
       }
@@ -169,7 +170,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
       for (i = 0; i < path->len; i++) {
         pack_address(hdr.path[i], path->route[i]);
       }
-      network_send_pkt(sizeof(struct routing_header), (char*)(&hdr), 0, &tmp);
+      network_send_pkt(path->route[1], sizeof(struct routing_header), (char*)(&hdr), 0, &tmp);
     }
     else {
       //different
