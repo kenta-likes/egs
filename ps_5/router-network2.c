@@ -70,6 +70,7 @@ transmit(int* arg) {
         sprintf(buffer, "Count is %d.\n", i+1);
         length = strlen(buffer) + 1;
         minimsg_send(port, dest, buffer, length);
+        minithread_yield();
     }
     return 0;
 }
@@ -94,6 +95,7 @@ transmit1(int* arg) {
         sprintf(buffer, "Count is %d.\n", i+1);
         length = strlen(buffer) + 1;
         minimsg_send(port, dest, buffer, length);
+        minithread_yield();
     }
 
     return 0;
