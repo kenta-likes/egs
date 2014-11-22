@@ -68,7 +68,7 @@ transmit(int* arg) {
         length = strlen(buffer) + 1;
         minimsg_send(port, dest, buffer, length);
     }
-    minithread_sleep_with_timeout(5000);// 5 second sleep
+    minithread_sleep_with_timeout(15000);// 5 second sleep
     for (i=MAX_COUNT/2; i<MAX_COUNT; i++) {
         printf("Sending packet %d.\n", i+1);
         sprintf(buffer, "Count is %d.\n", i+1);

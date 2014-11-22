@@ -99,6 +99,7 @@ void destroy_entry(void* arg){
   cache_alarm_arg_t entry_alarm;
   dlink_node_t delete_node;
   cache_entry_t delete_entry;
+  printf("cache entry being deleted\n");
 
   entry_alarm = (cache_alarm_arg_t)arg; //alarm info stored
   delete_node = entry_alarm->node; //node to be removed from cache list
