@@ -171,18 +171,10 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
       for (i = 0; i < path->len; i++) {
         pack_address(hdr.path[i], path->route[i]);
       }
-      printf("my addr is (%i,%i)\n", my_addr[0], my_addr[1]);
-      printf("source addr is (%i,%i)\n", src_addr[0], src_addr[1]);
-      printf("dst addr is (%i,%i)\n", dst_addr[0], dst_addr[1]);
-      for (i = 0 ; i < path->len; i++){
-        unpack_address(hdr.path[i], tmp_addr);
-        printf("->(%i,%i)", tmp_addr[0], tmp_addr[1]);
-      }
-      printf("\n");
       network_send_pkt(path->route[1], sizeof(struct routing_header), (char*)(&hdr), 0, &tmp);
     }
     else {
-      printf("got a DISCOVERY pkt, for someone else\n");
+      //printf("got a DISCOVERY pkt, for someone else\n");
       //different
       //scan to check if i am in list
       //if yes then discard
@@ -198,21 +190,21 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
           return 0;
         }
       }
-      printf("checks passed\n");
+      //printf("checks passed\n");
       pack_address(pkt_hdr->path[path_len], my_addr);
       pack_unsigned_int(pkt_hdr->path_len, path_len + 1); //add path_len
       pack_unsigned_int(pkt_hdr->ttl, pkt_ttl - 1); //subtract ttl
-      printf("packet header configured\n");
-      printf("my addr is (%i,%i)\n", my_addr[0], my_addr[1]);
-      printf("source addr is (%i,%i)\n", src_addr[0], src_addr[1]);
-      printf("dst addr is (%i,%i)\n", dst_addr[0], dst_addr[1]);
-      for (i = 0 ; i < path_len + 1; i++){
-        unpack_address(pkt_hdr->path[i], tmp_addr);
-        printf("->(%i,%i)", tmp_addr[0], tmp_addr[1]);
-      }
-      printf("\n");
+      //printf("packet header configured\n");
+      //printf("my addr is (%i,%i)\n", my_addr[0], my_addr[1]);
+      //printf("source addr is (%i,%i)\n", src_addr[0], src_addr[1]);
+      //printf("dst addr is (%i,%i)\n", dst_addr[0], dst_addr[1]);
+      //for (i = 0 ; i < path_len + 1; i++){
+        //unpack_address(pkt_hdr->path[i], tmp_addr);
+        //printf("->(%i,%i)", tmp_addr[0], tmp_addr[1]);
+      //}
+      //printf("\n");
       network_bcast_pkt(sizeof(struct routing_header), (char*)pkt_hdr, 0, &tmp); //send to neighbors
-      printf("broadcast successful\n");
+      //printf("broadcast successful\n");
     }
     break;
 
