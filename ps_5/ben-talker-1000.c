@@ -25,13 +25,13 @@ receive(int* arg) {
     miniport_t port;
     miniport_t from;
 
-    port = miniport_create_unbound(1);
+    port = miniport_create_unbound(42);
 
     while(1){
         length = BUFFER_SIZE;
         minimsg_receive(port, &from, buffer, &length);
         printf("%s", buffer);
-        //miniport_destroy(from);
+        miniport_destroy(from);
     }
 
     return 0;
@@ -48,15 +48,14 @@ transmit(int* arg) {
     AbortOnCondition(network_translate_hostname(hostname, addr) < 0,
                      "Could not resolve hostname, exiting.");
 
-    port = miniport_create_unbound(0);
-    dest = miniport_create_bound(addr, 1);
+    port = miniport_create_unbound(42);
+    dest = miniport_create_bound(addr, 42);
 
     printf("Welcome to our lovely chat service.");
     minithread_fork(receive, NULL);
 
     while(1){
-      miniterm_read(buffer, BUFFER_SIZE);
-      length = strlen(buffer) + 1;
+      length = miniterm_read(buffer, BUFFER_SIZE);
       minimsg_send(port, dest, buffer, length);
     }
 
