@@ -1,7 +1,9 @@
-en-cs-uglab11.coecis.cornell.edu
-en-cs-uglab10.coecis.cornell.edu
-en-cs-uglab09.coecis.cornell.edu
+en-cs-uglab12.coecis.cornell.edu
+en-cs-uglab13.coecis.cornell.edu
+en-cs-uglab14.coecis.cornell.edu
+en-cs-uglab01.coecis.cornell.edu
 
-xxx
-xxx
-xxx
+.x..
+x.x.
+.x.x
+..x.
