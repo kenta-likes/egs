@@ -6,6 +6,7 @@
 #include "minimsg.h"
 #include "synch.h"
 #include "read.h"
+#include "read_private.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -24,6 +25,8 @@ receive(int* arg) {
     int length;
     miniport_t port;
     miniport_t from;
+    
+    miniterm_initialize();
 
     port = miniport_create_unbound(42);
 
@@ -52,7 +55,6 @@ transmit(int* arg) {
     port = miniport_create_unbound(42);
     dest = miniport_create_bound(addr, 42);
 
-    printf("Welcome to our lovely chat service.");
     minithread_fork(receive, NULL);
 
     while(1){
@@ -67,12 +69,14 @@ transmit(int* arg) {
 int
 main(int argc, char** argv) {
 
+    printf("Welcome to our lovely chat service\n");
+
     if (argc > 1) {
         hostname = argv[1];
         minithread_system_initialize(transmit, NULL);
     }
     else {
-        minithread_system_initialize(receive, NULL);
+      printf("You fail. Enter the IP address of the computer you want to connect with.\n");
     }
 
     return -1;
