@@ -29,6 +29,7 @@ receive(int* arg) {
 
     while(1){
         length = BUFFER_SIZE;
+        memset(buffer, 0, BUFFER_SIZE);
         minimsg_receive(port, &from, buffer, &length);
         printf("%s", buffer);
         miniport_destroy(from);
@@ -55,6 +56,7 @@ transmit(int* arg) {
     minithread_fork(receive, NULL);
 
     while(1){
+      memset(buffer, 0, BUFFER_SIZE);
       length = miniterm_read(buffer, BUFFER_SIZE);
       minimsg_send(port, dest, buffer, length);
     }
