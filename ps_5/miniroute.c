@@ -202,10 +202,12 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
     if (network_compare_network_addresses(my_addr, dst_addr)) {
       //same
       control_block = hash_table_get(dcb_table, src_addr);
-      deregister_alarm(control_block->resend_alarm);
-      control_block->resend_alarm = NULL;
-      control_block->alarm_arg = NULL;
-      semaphore_V(control_block->route_ready);
+      if (control_block) {
+        deregister_alarm(control_block->resend_alarm);
+        control_block->resend_alarm = NULL;
+        control_block->alarm_arg = NULL;
+        semaphore_V(control_block->route_ready);
+      }
     }
     else {
       //different
