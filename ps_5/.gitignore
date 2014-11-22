@@ -21,6 +21,8 @@ conn-network6
 conn-network7
 conn-network8
 conn-network9
+router-network1
+router-network2
 network1
 network2
 network3
@@ -68,6 +70,8 @@ conn-network6.o
 conn-network7.o
 conn-network8.o
 conn-network9.o
+router-network1.o
+router-network2.o
 shop.o
 alarm.o
 alarmtest1.o
