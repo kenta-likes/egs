@@ -427,6 +427,7 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   runnable_count++;
   minimsg_initialize();
   minisocket_initialize();
+  miniterm_initialize();
   miniroute_initialize();
   process_packets_thread =  minithread_create(process_packets, NULL);
   multilevel_queue_enqueue(runnable_q,

@@ -6,7 +6,6 @@
 #include "minimsg.h"
 #include "synch.h"
 #include "read.h"
-#include "read_private.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -26,8 +25,6 @@ receive(int* arg) {
     miniport_t port;
     miniport_t from;
     
-    miniterm_initialize();
-
     port = miniport_create_unbound(42);
 
     while(1){
