@@ -126,7 +126,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
 
     //check from 2nd to second to last address
     found = 0;
-    for (i = 1; i < path_len - 2; i++) {
+    for (i = 1; i < path_len - 1; i++) {
       unpack_address(pkt_hdr->path[i], tmp_addr);
       if (network_compare_network_addresses(my_addr, tmp_addr)) {
         unpack_address(pkt_hdr->path[i+1], nxt_addr);
@@ -184,14 +184,13 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
     else {
       printf("got a DISCOVERY pkt, for someone else\n");
       //different
-      //check ttl
       //scan to check if i am in list
       //if yes then discard
       //else append to path vector and broadcast
       //
       //scan to check if i am in list
       //if yes then pass along, else discard
-      for (i = 1; i < path_len - 2; i++) {
+      for (i = 0; i < path_len - 1; i++) {
         unpack_address(pkt_hdr->path[i], tmp_addr);
         if (network_compare_network_addresses(my_addr, tmp_addr)) {
           free(pkt);
@@ -199,10 +198,21 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
           return 0;
         }
       }
-      pack_address(hdr.path[path_len], my_addr);
-      pack_unsigned_int(hdr.path_len, path_len + 1); //add path_len
+      printf("checks passed\n");
+      pack_address(pkt_hdr->path[path_len], my_addr);
+      pack_unsigned_int(pkt_hdr->path_len, path_len + 1); //add path_len
       pack_unsigned_int(pkt_hdr->ttl, pkt_ttl - 1); //subtract ttl
+      printf("packet header configured\n");
+      printf("my addr is (%i,%i)\n", my_addr[0], my_addr[1]);
+      printf("source addr is (%i,%i)\n", src_addr[0], src_addr[1]);
+      printf("dst addr is (%i,%i)\n", dst_addr[0], dst_addr[1]);
+      for (i = 0 ; i < path_len + 1; i++){
+        unpack_address(pkt_hdr->path[i], tmp_addr);
+        printf("->(%i,%i)", tmp_addr[0], tmp_addr[1]);
+      }
+      printf("\n");
       network_bcast_pkt(sizeof(struct routing_header), (char*)pkt_hdr, 0, &tmp); //send to neighbors
+      printf("broadcast successful\n");
     }
     break;
 

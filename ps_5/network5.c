@@ -62,7 +62,14 @@ transmit(int* arg) {
     port = miniport_create_unbound(0);
     dest = miniport_create_bound(addr, 1);
 
-    for (i=0; i<MAX_COUNT; i++) {
+    for (i=0; i<MAX_COUNT/2; i++) {
+        printf("Sending packet %d.\n", i+1);
+        sprintf(buffer, "Count is %d.\n", i+1);
+        length = strlen(buffer) + 1;
+        minimsg_send(port, dest, buffer, length);
+    }
+    minithread_sleep_with_timeout(5000);// 5 second sleep
+    for (i=MAX_COUNT/2; i<MAX_COUNT; i++) {
         printf("Sending packet %d.\n", i+1);
         sprintf(buffer, "Count is %d.\n", i+1);
         length = strlen(buffer) + 1;
@@ -74,13 +81,15 @@ transmit(int* arg) {
 
 int
 main(int argc, char** argv) {
+    /*
     short fromport, toport;
     fromport = atoi(argv[1]);
     toport = atoi(argv[2]);
     network_udp_ports(fromport,toport); 
+    */
 
-    if (argc > 3) {
-        hostname = argv[3];
+    if (argc > 1) {
+        hostname = argv[1];
         minithread_system_initialize(transmit, NULL);
     }
     else {

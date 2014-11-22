@@ -316,8 +316,8 @@ network_handler(network_interrupt_arg_t* pkt){
   char protocol;
   char* buf_ptr;
   
-  printf("in network_handler\n");
   l = set_interrupt_level(DISABLED);
+  printf("in network_handler\n");
 
   if (pkt->size < 0){
     set_interrupt_level(l);
