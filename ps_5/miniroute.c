@@ -71,9 +71,9 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
   dcb_t control_block;
   
   
-  printf("entering miniroute_process_packet\n");
+  //printf("entering miniroute_process_packet\n");
   if (pkt == NULL || pkt->size < sizeof(struct routing_header)) {
-    printf("exiting miniroute_process_packet on INVALID PARAMS\n");
+    //printf("exiting miniroute_process_packet on INVALID PARAMS\n");
     return 0;
   }
   
@@ -97,7 +97,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
       new_route = (network_address_t*)calloc(path_len, sizeof(network_address_t));
       if (new_route == NULL) {
         free(pkt);
-        printf("exiting miniroute_process_packet on CALLOC ERROR\n");
+        //printf("exiting miniroute_process_packet on CALLOC ERROR\n");
         return 0;
       }
       for (i = 0; i < path_len; i++) {
@@ -108,7 +108,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
       if (new_path == NULL) {
         free(pkt);
         free(new_route);
-        printf("exiting miniroute_process_packet on CALLOC ERROR\n");
+        //printf("exiting miniroute_process_packet on CALLOC ERROR\n");
         return 0;
       }
       new_path->route = new_route;
@@ -118,7 +118,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
   }
   else if (pkt_ttl <= 0) {
     free(pkt);
-    printf("exiting miniroute_process_packet on TTL ERROR\n");
+    //printf("exiting miniroute_process_packet on TTL ERROR\n");
     return 0;
   }
   else if (pkt_hdr->routing_packet_type != ROUTING_ROUTE_DISCOVERY) {
@@ -142,10 +142,10 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
 
   switch (pkt_hdr->routing_packet_type) {
   case ROUTING_DATA:
-    printf("got a DATA pkt\n");
+    //printf("got a DATA pkt\n");
     if (network_compare_network_addresses(my_addr, dst_addr)) {
       //same
-      printf("exiting miniroute_process_packet on DATA PKT\n"); 
+      //printf("exiting miniroute_process_packet on DATA PKT\n"); 
       return 1;
     }
     else {
@@ -159,7 +159,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
 
   case ROUTING_ROUTE_DISCOVERY:
     if (network_compare_network_addresses(my_addr, dst_addr)) {
-      printf("got a DISCOVERY pkt, for me\n");
+      //printf("got a DISCOVERY pkt, for me\n");
       //same  
       path = miniroute_cache_get(route_cache, src_addr);
 
@@ -186,7 +186,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
         unpack_address(pkt_hdr->path[i], tmp_addr);
         if (network_compare_network_addresses(my_addr, tmp_addr)) {
           free(pkt);
-          printf("exiting miniroute_process_packet on BROADCAST LOOP\n");
+         // printf("exiting miniroute_process_packet on BROADCAST LOOP\n");
           return 0;
         }
       }
@@ -209,7 +209,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
     break;
 
   case ROUTING_ROUTE_REPLY:
-    printf("got a REPLY pkt\n");
+    //printf("got a REPLY pkt\n");
     if (network_compare_network_addresses(my_addr, dst_addr)) {
       //same
       control_block = hash_table_get(dcb_table, src_addr);
@@ -238,7 +238,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
     //WTFFF???
     break;
   }    
-  printf("exiting miniroute_process_packet on SUCCESS\n"); 
+  //printf("exiting miniroute_process_packet on SUCCESS\n"); 
   free(pkt);
   return 0;
 }
@@ -249,10 +249,10 @@ void miniroute_resend(void* arg) {
   char tmp;
   resend_arg_t params = (resend_arg_t)arg;
 
-  printf("entering miniroute_resend\n");
+  //printf("entering miniroute_resend\n");
   params->try_count++;
   if (params->try_count >= 3) {
-    printf("timed out when trying discover a route\n");
+    printf("timed out when trying to reach host\n");
     params->control_block->resend_alarm = NULL;
     params->control_block->alarm_arg = NULL;
     semaphore_V(params->control_block->route_ready); 
@@ -260,7 +260,7 @@ void miniroute_resend(void* arg) {
   }
   //assign fresh id
   pack_unsigned_int(params->hdr->id, curr_discovery_pkt_id++);
-  printf("sending another DISCOVERY pkt\n");
+  //printf("sending another DISCOVERY pkt\n");
   network_bcast_pkt(sizeof(struct routing_header), (char*)(params->hdr), 0, &tmp);
   params->control_block->resend_alarm = set_alarm(120, miniroute_resend, 
       params->control_block->alarm_arg, minithread_time());  
@@ -276,11 +276,11 @@ miniroute_t miniroute_discover_route(network_address_t dest) {
   dcb_t control_block;
   struct routing_header hdr;
 
-  printf("entering miniroute_discover_route\n"); 
+  //printf("entering miniroute_discover_route\n"); 
   l = set_interrupt_level(DISABLED);
   path = miniroute_cache_get(route_cache, dest);
   if (path != NULL) {
-    printf("got route from cache\n");
+    //printf("got route from cache\n");
     set_interrupt_level(l);
     return path;
   }
@@ -309,11 +309,11 @@ miniroute_t miniroute_discover_route(network_address_t dest) {
     control_block->resend_alarm = NULL;
     control_block->alarm_arg = NULL;
     hash_table_add(dcb_table, dest, control_block);
-    printf("made a NEW discover control block\n"); 
+    //printf("made a NEW discover control block\n"); 
     }
   control_block = hash_table_get(dcb_table, dest);
   if (!control_block) {
-    printf("ERROR: could not find discover control block\n");
+    //printf("ERROR: could not find discover control block\n");
     set_interrupt_level(l);
     return NULL;
   }
@@ -328,7 +328,7 @@ miniroute_t miniroute_discover_route(network_address_t dest) {
     control_block->count--;
     semaphore_V(control_block->mutex);
     set_interrupt_level(l);
-    printf("exiting miniroute_discover_route on SUCCESS\n"); 
+    //printf("exiting miniroute_discover_route on SUCCESS\n"); 
     return path;
   }
   else {
@@ -345,7 +345,7 @@ miniroute_t miniroute_discover_route(network_address_t dest) {
     arg.control_block = control_block;    
     control_block->alarm_arg = &arg; 
 
-    printf("sending first DISCOVERY pkt\n");
+    //printf("sending first DISCOVERY pkt\n");
     if (network_bcast_pkt(sizeof(struct routing_header), (char*)(&hdr), 0, &tmp) == -1) {
       //error
       control_block->count--;
@@ -363,7 +363,7 @@ miniroute_t miniroute_discover_route(network_address_t dest) {
     control_block->count--;
     semaphore_V(control_block->mutex);
     set_interrupt_level(l);
-    printf("exiting miniroute_discover_route on SUCCESS\n"); 
+    //printf("exiting miniroute_discover_route on SUCCESS\n"); 
     return path;
   }
 }
@@ -383,9 +383,9 @@ int miniroute_send_pkt(network_address_t dest_address, int hdr_len,
   char* new_data;
   int bytes_sent;
   
-  printf("entering miniroute_send_pkt\n");
+  //printf("entering miniroute_send_pkt\n");
   if (hdr_len < 0 || data_len < 0 || hdr == NULL || data == NULL) {
-    printf("invalid params\n");
+    //printf("invalid params\n");
     return -1;
   }
   path = miniroute_discover_route(dest_address);
@@ -402,7 +402,7 @@ int miniroute_send_pkt(network_address_t dest_address, int hdr_len,
     semaphore_destroy(control_block->route_ready);
     hash_table_remove(dcb_table, dest_address);
     free(control_block);
-    printf("destroyed a discovery control block\n");
+    //printf("destroyed a discovery control block\n");
   }
   set_interrupt_level(l);
 
@@ -429,11 +429,11 @@ int miniroute_send_pkt(network_address_t dest_address, int hdr_len,
       (char*)&new_hdr, new_data_len, new_data);
   free(new_data);
   if ((bytes_sent - hdr_len) < 0) {
-    printf("exiting miniroute_send_pkt on FAILURE\n");
+    //printf("exiting miniroute_send_pkt on FAILURE\n");
     return -1;
   }
   else {
-    printf("exiting miniroute_send_pkt on SUCCESS\n");
+    //printf("exiting miniroute_send_pkt on SUCCESS\n");
     return (bytes_sent - hdr_len);
   }
 }

@@ -319,17 +319,16 @@ network_handler(network_interrupt_arg_t* pkt){
   char* buf_ptr;
   
   l = set_interrupt_level(DISABLED);
-  printf("in network_handler\n");
+  //printf("in network_handler\n");
 
   if (pkt->size < 0){
     set_interrupt_level(l);
     return;
   }
 
-  printf("PACKET passed checks\n");
   //first check if router packet is destined for us
   if (miniroute_process_packet(pkt)){
-    printf("PACKET IS HURRR\n");
+    //printf("PACKET IS HURRR\n");
  
     //pass packet on to tcp/udp 
     buf_ptr = pkt->buffer;
@@ -351,7 +350,7 @@ network_handler(network_interrupt_arg_t* pkt){
       return;
     }
     else if (protocol == PROTOCOL_MINISTREAM) {
-      printf("got a tcp packet\n");
+      //printf("got a tcp packet\n");
       minisocket_process_packet((void*)pkt);
       set_interrupt_level(l);
     }
