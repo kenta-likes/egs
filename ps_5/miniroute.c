@@ -280,6 +280,7 @@ miniroute_t miniroute_discover_route(network_address_t dest) {
   l = set_interrupt_level(DISABLED);
   path = miniroute_cache_get(route_cache, dest);
   if (path != NULL) {
+    printf("got route from cache\n");
     set_interrupt_level(l);
     return path;
   }
