@@ -49,6 +49,8 @@ machineprimitives_x86_64_asm.o
 minithread.o
 multilevel_queue.o
 queue.o
+disk.o
+minifile.o
 random.o
 read.o
 miniroute.o
