@@ -37,6 +37,7 @@ network_test_bound
 buffer
 sieve
 ben-talker-1000
+shell
 .depend
 
 minisocket.o
@@ -100,3 +101,4 @@ network_test_bound.o
 miniroute_cache_test.o
 miniroute_cache.o
 ben-talker-1000.o
+shell.o
