@@ -38,6 +38,7 @@ buffer
 sieve
 ben-talker-1000
 shell
+mkfs
 .depend
 
 minisocket.o
@@ -102,3 +103,4 @@ miniroute_cache_test.o
 miniroute_cache.o
 ben-talker-1000.o
 shell.o
+mkfs.o

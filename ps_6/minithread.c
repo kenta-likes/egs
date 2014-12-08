@@ -49,6 +49,9 @@ int sys_time = 0;
 const int TIME_QUANTA = 100 * MILLISECOND;
 network_address_t my_addr;
 disk_t* my_disk = NULL;
+/*global vars for disk.h*/
+int use_existing_disk;
+const char* disk_name;
 
 
 //getter for priority
@@ -422,7 +425,9 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   void* dummy_ptr = NULL;
   dummy_ptr = (void*)&a;
   current_id = 0; // the next thread id to be assigned
-  my_disk = (disk_t*)malloc(sizeof(disk_t));
+  my_disk = (disk_t*)calloc(1, sizeof(disk_t));
+  use_existing_disk = 1;
+  disk_name = "minidisk";
   network_get_my_address(my_addr);
   id_lock = semaphore_create();
   semaphore_initialize(id_lock,1); 
