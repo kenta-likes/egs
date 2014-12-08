@@ -1,0 +1,72 @@
+Steps to rm_DB
+- fdb->tl->next = db
+- Nullify direct ptr
+- db: Nullify + label free
+- fbd->tl = fbd->tl->next
+
+Steps to rm_File
+- foreach db: rm_DB(db)
+- fib->tl->next = file
+- file: Nullify + label free
+- fib->tl = fib->tl->next
+
+Steps to rm_Dir
+- fib->tl->next = dir
+- dir: Nullfy + lable free
+- fib->tl = fib->tl->next
+
+Steps to alloc_DB
+- update inode->byte_count
+- direct ptr = fdb->hd
+- db: write data + label data
+- fdb->hd = fdb->head->next
+
+Steps to alloc_File
+- update dir with fib->hd
+- write inode stuff to fib->hd
+- fib->head = fib->head->next
+
+Steps to alloc_Dir
+- same as alloc_File
+
+What to do when you're fscked
+- check fdb.hd & fib.hd and increment if mode != free
+- if fdb->tail->next != NULL:
+    - if fdb->tail->next->mode == FREE: 
+      - fdb->tail = fdb->tail->next
+    - else:
+      - Nullify fdb->tail->next
+      - fdb->tail = fdb->tail->next
+- if fib->tail->next != NULL:
+    - if fib->tail->next->mode == FREE: 
+      - fib->tail = fib->tail->next
+    - else:
+      - Nullify fib->tail->next
+      - fib->tail = fib->tail->next
+- check if 
+-
+
+def check_dir:
+  for each block: 
+    if block == NULL:
+      print 'WUT??!'
+    
+    for each entry in block:
+      if entry == NULL:
+        rm entry
+      read inode:
+        if mode == FREE:
+          # this inode data was not copied in time
+          rm entry 
+
+        else if type == FILE:
+          check_file(entry)
+
+        else: # type == DIR:
+          check_dir(entry)
+  
+def check_file:
+  for each block:
+    if block
+
+
