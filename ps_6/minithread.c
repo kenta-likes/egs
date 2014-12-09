@@ -47,10 +47,6 @@ semaphore_t dead_sem = NULL;
 int sys_time = 0;
 const int TIME_QUANTA = 100 * MILLISECOND;
 network_address_t my_addr;
-disk_t* disk;
-/*global vars for disk.h*/
-int use_existing_disk;
-const char* disk_name;
 
 
 //getter for priority
@@ -416,8 +412,6 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   void* dummy_ptr = NULL;
   dummy_ptr = (void*)&a;
   current_id = 0; // the next thread id to be assigned
-  disk_name = "MINIFILESYSTEM";
-  disk = (disk_t*)calloc(1, sizeof(disk_t));
   network_get_my_address(my_addr);
   id_lock = semaphore_create();
   semaphore_initialize(id_lock,1); 
@@ -437,7 +431,6 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   minimsg_initialize();
   minisocket_initialize();
   miniroute_initialize();
-  disk_initialize(disk);
   minifile_initialize();
   miniterm_initialize();
   process_packets_thread =  minithread_create(process_packets, NULL);
