@@ -30,6 +30,7 @@ int INODE_START;
 int DATA_START;
 block_ctrl_t* block_array = NULL;
 semaphore_t disk_op_lock;
+disk_t* my_disk;
 
 /* FUNC DEFS */
 block_ctrl_t minifile_block_ctrl_create(void) {
@@ -161,25 +162,36 @@ void minifile_make_fs(void) {
   super_block* super;
   inode_block* inode;
   data_block* data;
+  char* out;
   char* magic = "4411";
-
+  
+  out = calloc(DISK_BLOCK_SIZE, sizeof(char));
   super = (super_block*)calloc(1, sizeof(super_block));
   inode = (inode_block*)calloc(1, sizeof(inode_block));
   data = (data_block*)calloc(1, sizeof(inode_block));
  
   semaphore_P(disk_op_lock); 
-  INODE_START = 3;
-  DATA_START = disk_size / 10 + 1;
+  INODE_START = 1;
+  DATA_START = disk_size / 10;
   memcpy(super->u.hdr.magic_num, magic, 4);
   super->u.hdr.block_count = disk_size;
-  super->u.hdr.fib = INODE_START;
-  super->u.hdr.fdb = DATA_START; 
-  super->u.hdr.root = 2;
+  super->u.hdr.fib = INODE_START + 1;
+  super->u.hdr.fdb = DATA_START + 1; 
+  super->u.hdr.root = INODE_START;
+  
+  disk_write_block(my_disk, 0, (char*)super);
+  minithread_sleep_with_timeout(100);
+  disk_read_block(my_disk, 0, out);
+  minithread_sleep_with_timeout(100);
+  printf("block_count: %d\n", ((super_block*)out)->u.hdr.block_count);
+  printf("first free inode: %d\n", ((super_block*)out)->u.hdr.fib);
+  printf("first free data block: %d\n", ((super_block*)out)->u.hdr.fdb);
+  printf("root at block: %d\n", ((super_block*)out)->u.hdr.root);
   
   minifile_ensure_exist_at(0);
-  //disk_write_block 
-  semaphore_P(block_array[0]->block_sem);
+  //semaphore_P(block_array[0]->block_sem);
   inode->u.hdr.status = FREE;
   data->u.hdr.status = FREE; 
+  semaphore_V(disk_op_lock); 
 }
 

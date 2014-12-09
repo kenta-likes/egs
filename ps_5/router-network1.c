@@ -1,10 +1,10 @@
-/* network test program 5
+/* router network test program 1
 
      send a stream of messages from one computer to another;
      this test may hang since the message layer (built on UDP) is unreliable, so
      if a message is lost, the receiver will block indefinitely.
 
-     USAGE: ./network5 <souceport> <destport> [<hostname>]
+     USAGE: ./ router-network1 [<hostname>]
 
      sourceport = udp port to listen on.
      destport     = udp port to send to.
