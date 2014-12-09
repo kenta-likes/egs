@@ -21,9 +21,9 @@ typedef struct {
     struct super_hdr {
       char magic_num[4];
       int block_count;
-      int fib;
-      int fdb;
-      int root;
+      int free_iblocks; //head of free inode block list
+      int free_dblocks; //head of free data block list
+      int root; //block # of root dir
     } hdr;
 
     char padding[DISK_BLOCK_SIZE];
@@ -143,6 +143,31 @@ minifile_disk_handler(void* arg) {
   return;
 }
 
+/*
+ * Helper function to get block number from
+ * a directory/file path
+ * Returns: block number, -1 if path DNE
+ * */
+int minifile_get_block_from_dir(char* path){
+  super_block s_block;
+  inode_block i_block;
+  char* curr_dir_name;
+  int read_end;
+  int i;
+  
+  curr_dir_name = path;
+  //this is a relative path
+  if (dirname[0] != '/'){
+    while (curr_dir_name[0] != '\0'){
+      //keep reading the path...
+    }
+    read_end = 
+  } //otherwise this is an absolute path
+  else {
+    curr_dir_name += 1;
+  }
+
+}
 
 minifile_t minifile_creat(char *filename){
   return NULL;
@@ -188,8 +213,15 @@ char **minifile_ls(char *path){
   return NULL;
 }
 
+/*
+ * returns the current directory by strcpy-ing the curr_dir
+ * */
 char* minifile_pwd(void){
-  return NULL;
+  char* user_curr_dir;
+
+  user_curr_dir = (char*)calloc(strlen(minithread_get_curr_dir()) + 1, sizeof(char));
+  strcpy(user_curr_dir, minithread_get_curr_dir());
+  return user_curr_dir;
 }
 
 void minifile_make_fs(void) {

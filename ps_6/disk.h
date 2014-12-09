@@ -28,7 +28,7 @@ extern double reordering_rate;
    then call disk_initialize. Upon successful startup, disk_flags and disk_size will
    be correctly initialized.
  */
-extern int use_existing_disk;	/* Set to 1 if using an existing disk, 0 to create a new one */
+extern int use_existing_disk = 1;	/* Set to 1 if using an existing disk, 0 to create a new one */
 extern const char* disk_name;	/* Linux filename that stores your virtual disk */
 extern int disk_flags;			/* Set to DISK_READWRITE or DISK_READONLY */
 extern int disk_size;			/* Set to the number of blocks allocated for disk */
