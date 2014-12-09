@@ -71,7 +71,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
   dcb_t control_block;
   
   
-  //printf("entering miniroute_process_packet\n");
+  printf("entering miniroute_process_packet\n");
   if (pkt == NULL || pkt->size < sizeof(struct routing_header)) {
     //printf("exiting miniroute_process_packet on INVALID PARAMS\n");
     return 0;
@@ -159,7 +159,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
 
   case ROUTING_ROUTE_DISCOVERY:
     if (network_compare_network_addresses(my_addr, dst_addr)) {
-      //printf("got a DISCOVERY pkt, for me\n");
+      printf("got a DISCOVERY pkt, for me\n");
       //same  
       path = miniroute_cache_get(route_cache, src_addr);
 
@@ -209,7 +209,7 @@ int miniroute_process_packet(network_interrupt_arg_t* pkt) {
     break;
 
   case ROUTING_ROUTE_REPLY:
-    //printf("got a REPLY pkt\n");
+    printf("got a REPLY pkt\n");
     if (network_compare_network_addresses(my_addr, dst_addr)) {
       //same
       control_block = hash_table_get(dcb_table, src_addr);
