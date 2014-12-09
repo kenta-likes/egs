@@ -1,6 +1,7 @@
 #include "minithread.h"
 #include "synch.h"
 #include "disk.h"
+#include "minifile.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,16 +12,7 @@ int disk_flags;
 int disk_size;
 
 int init(int* arg) {
-  /*super_block super;
-  char* out;
-
-  out = (char*)calloc(DISK_BLOCK_SIZE, sizeof(char));
-  printf("disk initialized\n");  
-  printf("write status: %d\n", disk_write_block(disk, 1, buff));    
-  minithread_sleep_with_timeout(1000);
-  printf("read status: %d\n", disk_read_block(disk, 1, out));
-  minithread_sleep_with_timeout(1000);
-  printf("%s", out); */
+  minifile_make_fs();
   return 0;
 }
 
@@ -34,6 +26,7 @@ int main(int argc, char** argv) {
   use_existing_disk = 0;
   disk_flags = DISK_READWRITE;
   disk_size = atoi(argv[1]);
+  disk_name = "MINIFILESYSTEM";
   
   minithread_system_initialize(init, NULL);
   // write superblock

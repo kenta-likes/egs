@@ -80,11 +80,12 @@ minifile_disk_handler(void* arg) {
   interrupt_level_t l;
 
   l = set_interrupt_level(DISABLED);
+  printf("enter minifile_disk_handler\n");
   block_arg = (disk_interrupt_arg_t*)arg;
   block_num = block_arg->request.blocknum;
 
   //check if the block number is within sensible bounds
-  if (block_num > disk_size || block_num < 1 ){
+  if (block_num > disk_size || block_num < 0){
     set_interrupt_level(l);
     printf("error: disk response with invalid parameters\n");
     return;
@@ -157,6 +158,7 @@ void minifile_make_fs(void) {
   data = (data_block*)calloc(1, sizeof(inode_block));
  
   semaphore_P(disk_op_lock); 
+  printf("enter minifile_make_fs\n");
   INODE_START = 1;
   DATA_START = disk_size / 10;
   memcpy(super->u.hdr.magic_num, magic, 4);
@@ -165,16 +167,17 @@ void minifile_make_fs(void) {
   super->u.hdr.fdb = DATA_START + 1; 
   super->u.hdr.root = INODE_START;
   
-  disk_write_block(my_disk, 0, (char*)super);
-  minithread_sleep_with_timeout(100);
-  disk_read_block(my_disk, 0, out);
-  minithread_sleep_with_timeout(100);
-  printf("block_count: %d\n", ((super_block*)out)->u.hdr.block_count);
-  printf("first free inode: %d\n", ((super_block*)out)->u.hdr.fib);
-  printf("first free data block: %d\n", ((super_block*)out)->u.hdr.fdb);
-  printf("root at block: %d\n", ((super_block*)out)->u.hdr.root);
-  
   minifile_ensure_exist_at(0);
+  disk_write_block(my_disk, 0, (char*)super);
+  semaphore_P(block_array[0]->block_sem);
+  disk_read_block(my_disk, 0, out);
+  semaphore_P(block_array[0]->block_sem);
+  //printf("super block:\n");
+  //printf("block_count: %d\n", ((super_block*)out)->u.hdr.block_count);
+  //printf("first free inode: %d\n", ((super_block*)out)->u.hdr.fib);
+  //printf("first free data block: %d\n", ((super_block*)out)->u.hdr.fdb);
+  //printf("root at block: %d\n", ((super_block*)out)->u.hdr.root);
+  
   //semaphore_P(block_array[0]->block_sem);
   inode->u.hdr.status = FREE;
   data->u.hdr.status = FREE; 
