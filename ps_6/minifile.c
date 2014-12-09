@@ -1,4 +1,8 @@
 #include "minifile.h"
+#include "synch.h"
+#include "disk.h"
+#include "minithread.h"
+#include "interrupts.h"
 
 /*
  * struct minifile:
@@ -10,6 +14,58 @@ struct minifile {
   /* add members here */
   int dummy;
 };
+
+typedef struct block_ctrl{
+  semaphore_t block_sem;
+  disk_interrupt_arg_t* block_arg;
+} block_ctrl;
+
+typedef block_ctrl* block_ctrl_t;
+
+block_ctrl_t* block_array = NULL;
+int disk_size;
+const char* disk_name;
+
+/*
+ * This is the disk handler
+ */
+void 
+disk_handler(void* arg) {
+  disk_interrupt_arg_t* block_arg;
+  int block_num;
+  interrupt_level_t l;
+
+  l = set_interrupt_level(DISABLED);
+  block_arg = (disk_interrupt_arg_t*)arg;
+  block_num = block_arg->request.blocknum;
+
+  if (block_num > disk_size || block_num < 1 ){
+    set_interrupt_level(l);
+    printf("error: disk response with invalid parameters\n");
+    return;
+  }
+  block_array[block_num]->block_arg = block_arg;
+  semaphore_V(block_array[block_num]->block_sem);
+  set_interrupt_level(l);
+  return;
+}
+
+
+int minifile_initialize(){
+  int i;
+  //call mkfs functions to creat the file system
+ 
+ 
+  //initialize the array
+  block_array = (block_ctrl_t*)calloc(disk_size, sizeof(block_ctrl_t));
+  for (i = 0; i < disk_size; i++){
+    //block_array[i] = block_ctrl_create();
+  }
+
+  //install a handler
+  install_disk_handler(disk_handler);
+  return 0;
+}
 
 minifile_t minifile_creat(char *filename){
   return NULL;
