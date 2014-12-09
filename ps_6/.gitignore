@@ -1,6 +1,7 @@
 shop_preemp
 test_scheduler
 test_alarm
+test_mkfs
 alarmtest1
 alarmtest2
 test_sleep
@@ -104,3 +105,4 @@ miniroute_cache.o
 ben-talker-1000.o
 shell.o
 mkfs.o
+test_mkfs.o

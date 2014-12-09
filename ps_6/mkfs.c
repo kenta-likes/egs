@@ -1,6 +1,5 @@
 #include "minithread.h"
 #include "synch.h"
-#include "disk.h"
 #include "minifile.h"
 
 #include <stdio.h>
@@ -26,7 +25,6 @@ int main(int argc, char** argv) {
   use_existing_disk = 0;
   disk_flags = DISK_READWRITE;
   disk_size = atoi(argv[1]);
-  disk_name = "MINIFILESYSTEM";
   
   minithread_system_initialize(init, NULL);
   // write superblock
