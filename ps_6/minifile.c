@@ -4,6 +4,7 @@
 #include "minithread.h"
 #include "interrupts.h"
 
+#define DATA_BLOCK_SIZE (DISK_BLOCK_SIZE-sizeof(int)-1)
 /*
  * struct minifile:
  *     This is the structure that keeps the information about 
@@ -11,6 +12,51 @@
  */
 
 /* TYPE DEFS */
+
+/*
+ * All the structs for our block types
+ * */
+typedef struct {
+  union super_union {
+    struct super_hdr {
+      char magic_num[4];
+      int block_count;
+      int fib;
+      int fdb;
+      int root;
+    } hdr;
+
+    char padding[DISK_BLOCK_SIZE];
+  } u;
+} super_block;
+
+typedef struct {
+  union inode_union {
+    struct inode_hdr {
+      char status;
+      int next;
+      int byte_count;
+      int d_ptrs[11];
+      int i_ptr;
+    } hdr;
+  
+    char padding[DISK_BLOCK_SIZE];
+  } u;
+} inode_block;
+
+typedef struct {
+  union data_union {
+    struct data_hdr {
+      char status;
+      int next;
+      char data[DATA_BLOCK_SIZE];
+    } hdr;
+  
+    char padding[DISK_BLOCK_SIZE];
+  } u;
+} data_block;
+
+
 struct minifile {
   /* add members here */
   int dummy;
@@ -22,6 +68,8 @@ typedef struct block_ctrl{
 } block_ctrl;
 
 typedef block_ctrl* block_ctrl_t;
+
+enum { FREE = 1, IN_USE };
 
 /* GLOBAL VARS */
 int disk_size;
