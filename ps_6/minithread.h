@@ -80,6 +80,18 @@ extern minithread_t minithread_self();
  */
 extern int minithread_id();
 
+/*
+ * Gets the current directory of this thread
+ * */
+extern char* minithread_get_curr_dir();
+
+/*
+ * Sets the current directory of this thread to arg
+ * Returns the old current directory
+ * Caller is responsible for freeing the old char*
+ * */
+extern char* minithread_set_curr_dir(char* arg);
+
 
 /*
  * minithread_stop()

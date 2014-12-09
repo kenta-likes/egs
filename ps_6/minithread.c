@@ -32,6 +32,7 @@ typedef struct minithread {
   stack_pointer_t stackbase;
   stack_pointer_t stacktop;
   int status;
+  char* curr_dir; //path of current directory
 } minithread;
 
 int current_id = 0; // the next thread id to be assigned
@@ -167,6 +168,7 @@ minithread_create(proc_t proc, arg_t arg) {
   new_thread->stackbase = NULL;
   new_thread->stacktop =  NULL;
   new_thread->status = RUNNABLE;
+  new_thread->curr_dir = "/";
   minithread_allocate_stack(&(new_thread->stackbase), &(new_thread->stacktop) );
   minithread_initialize_stack(&(new_thread->stacktop), proc, arg,
                               (proc_t)minithread_exit, NULL);
@@ -181,6 +183,23 @@ minithread_self() {
 int
 minithread_id() {
   return current_thread->id;
+}
+
+char* minithread_get_curr_dir(){
+  return current_thread->curr_dir;
+}
+
+//returns previous curr_dir
+char* minithread_set_curr_dir(char* new_dir){
+  char* tmp;
+
+  if ( current_thread ){
+    tmp = current_thread->curr_dir;
+    current_thread->curr_dir = new_dir;
+    return tmp;
+  }
+  return NULL;
+
 }
 
 void
