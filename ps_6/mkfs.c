@@ -9,23 +9,19 @@
 int use_existing_disk;
 int disk_flags;
 int disk_size;
-char* buff;
-char* out;
 disk_t* disk;
 
 int init(int* arg) {
+  /*super_block super;
+  char* out;
+
   out = (char*)calloc(DISK_BLOCK_SIZE, sizeof(char));
-  buff = (char*)calloc(DISK_BLOCK_SIZE, sizeof(char));
-  buff[0] = 'a';
-  buff[1] = 'b';
-  buff[2] = 'c';
-  buff[3] = '\n';
   printf("disk initialized\n");  
   printf("write status: %d\n", disk_write_block(disk, 1, buff));    
   minithread_sleep_with_timeout(1000);
   printf("read status: %d\n", disk_read_block(disk, 1, out));
   minithread_sleep_with_timeout(1000);
-  printf("%s", out); 
+  printf("%s", out); */
   return 0;
 }
 

@@ -1,6 +1,8 @@
 #include "minifile.h"
-#include "disk.h"
 #include "synch.h"
+#include "disk.h"
+#include "minithread.h"
+#include "interrupts.h"
 
 /*
  * struct minifile:
@@ -14,22 +16,23 @@ struct minifile {
   int dummy;
 };
 
+typedef struct block_ctrl{
+  semaphore_t block_sem;
+  disk_interrupt_arg_t* block_arg;
+} block_ctrl;
+
 typedef block_ctrl* block_ctrl_t;
 
 /* GLOBAL VARS */
 int disk_size;
+const char* disk_name;
 int INODE_START;
 int DATA_START;
+block_ctrl_t* block_array = NULL;
+semaphore_t disk_op_lock;
 
 /* FUNC DEFS */
-
-void minifile_ensure_exist_at(int idx) {
-  if (!block_array[idx]) {
-    block_array[idx] = block_ctrl_create();
-  }
-}
-
-block_ctrl_t minifile_block_ctrl_create() {
+block_ctrl_t minifile_block_ctrl_create(void) {
   block_ctrl_t newb;
   
   newb = (block_ctrl_t)calloc(1, sizeof(block_ctrl));
@@ -39,7 +42,7 @@ block_ctrl_t minifile_block_ctrl_create() {
     free(newb);
   }
   
-  sempahore_initialize(newb->block_sem, 0);
+  semaphore_initialize(newb->block_sem, 0);
   return newb; 
 }
 
@@ -47,10 +50,62 @@ int minifile_block_ctrl_destroy(block_ctrl_t b) {
   if (!b) {
     return -1;
   }
-  if (semaphore_destroy(b->block_sem)) {
+  if (!b->block_sem) {
+    free(b);
     return -1;
   }
+  semaphore_destroy(b->block_sem);
   free(b);
+  return 0;
+}
+
+void minifile_ensure_exist_at(int idx) {
+  if (!block_array[idx]) {
+    block_array[idx] = minifile_block_ctrl_create();
+  }
+}
+
+/*
+ * This is the disk handler
+ */
+void 
+disk_handler(void* arg) {
+  disk_interrupt_arg_t* block_arg;
+  int block_num;
+  interrupt_level_t l;
+
+  l = set_interrupt_level(DISABLED);
+  block_arg = (disk_interrupt_arg_t*)arg;
+  block_num = block_arg->request.blocknum;
+
+  if (block_num > disk_size || block_num < 1 ){
+    set_interrupt_level(l);
+    printf("error: disk response with invalid parameters\n");
+    return;
+  }
+  block_array[block_num]->block_arg = block_arg;
+  semaphore_V(block_array[block_num]->block_sem);
+  set_interrupt_level(l);
+  return;
+}
+
+
+int minifile_initialize(){
+  int i;
+  //call mkfs functions to creat the file system
+ 
+ 
+  //initialize the array
+  block_array = (block_ctrl_t*)calloc(disk_size, sizeof(block_ctrl_t));
+  for (i = 0; i < disk_size; i++){
+    //block_array[i] = block_ctrl_create();
+  }
+
+  //install a handler
+  install_disk_handler(disk_handler);
+
+  disk_op_lock = semaphore_create();
+  semaphore_initialize(disk_op_lock, 1);
   return 0;
 }
 
@@ -122,7 +177,7 @@ void minifile_make_fs(void) {
   super->u.hdr.root = 2;
   
   minifile_ensure_exist_at(0);
-  disk_write_block 
+  //disk_write_block 
   semaphore_P(block_array[0]->block_sem);
   inode->u.hdr.status = FREE;
   data->u.hdr.status = FREE; 

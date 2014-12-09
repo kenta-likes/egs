@@ -14,6 +14,14 @@
 
 typedef struct minifile* minifile_t;
 
+/*
+ * Initializer function for the file system.
+ * Takes care of defining and installing the disk interrupt handler
+ * Takes care of initializing the disk and creating the 
+ * supernode, inodes, and data blocks
+ * */
+int minifile_initialize();
+
 /* 
  * General requiremens:
  *     If filenames and/or dirnames begin with a "/" they are absolute

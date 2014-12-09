@@ -371,14 +371,6 @@ network_handler(network_interrupt_arg_t* pkt){
 }
 
 
-/*
- * This is the disk handler
- */
-void 
-disk_handler(void* arg) {
-  return;
-}
-
 void
 wake_up(void* sem){
   semaphore_V((semaphore_t)sem);
@@ -446,7 +438,7 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
   minisocket_initialize();
   miniroute_initialize();
   disk_initialize(disk);
-  install_disk_handler(disk_handler);
+  minifile_initialize();
   miniterm_initialize();
   process_packets_thread =  minithread_create(process_packets, NULL);
   multilevel_queue_enqueue(runnable_q,

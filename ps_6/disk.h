@@ -35,21 +35,22 @@ extern int disk_flags;			/* Set to DISK_READWRITE or DISK_READONLY */
 extern int disk_size;			/* Set to the number of blocks allocated for disk */
 
 typedef struct {
-  union {
-    struct {
+  union super_union {
+    struct super_hdr {
       char magic_num[4];
+      int block_count;
       int fib;
       int fdb;
       int root;
     } hdr;
 
     char padding[DISK_BLOCK_SIZE];
-  };
+  } u;
 } super_block;
 
 typedef struct {
-  union {
-    struct {
+  union inode_union {
+    struct inode_hdr {
       char status;
       int next;
       int byte_count;
@@ -58,19 +59,19 @@ typedef struct {
     } hdr;
   
     char padding[DISK_BLOCK_SIZE];
-  };
+  } u;
 } inode_block;
 
 typedef struct {
-  union {
-    struct {
+  union data_union {
+    struct data_hdr {
       char status;
       int next;
       char data[DATA_BLOCK_SIZE];
     } hdr;
   
     char padding[DISK_BLOCK_SIZE];
-  };
+  } u;
 } data_block;
 
 enum { FREE = 1, IN_USE };
