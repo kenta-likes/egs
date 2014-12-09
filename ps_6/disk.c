@@ -287,6 +287,7 @@ void disk_poll(void* arg) {
              */
             if (disk->queue->next !=NULL &&
                     (genrand() < reordering_rate)){
+                //kprintf("Disk: swapping.\n");
                 disk_queue_elem_t* first = disk->queue;
                 disk_queue_elem_t* second = first->next;
                 first->next = second->next;

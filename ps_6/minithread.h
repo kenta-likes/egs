@@ -13,10 +13,13 @@
 
 #include "machineprimitives.h"
 #include "multilevel_queue.h"
+#include "disk.h"
 #define RUNNABLE 0
 #define BLOCKED 1
 #define RUNNING 2
 #define DEAD -1
+
+extern disk_t* disk;
 
 //simple getter function for priority of thread
 int minithread_priority();

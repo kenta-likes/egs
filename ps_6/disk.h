@@ -17,7 +17,7 @@
 
 #define DISK_BLOCK_SIZE 4096
 #define MAX_PENDING_DISK_REQUESTS 128
-
+#define DATA_BLOCK_SIZE (DISK_BLOCK_SIZE-sizeof(int)-1)
 /* global variables that control the behavior of the disk */
 extern double crash_rate;
 extern double failure_rate;
@@ -34,6 +34,48 @@ extern const char* disk_name;	/* Linux filename that stores your virtual disk */
 extern int disk_flags;			/* Set to DISK_READWRITE or DISK_READONLY */
 extern int disk_size;			/* Set to the number of blocks allocated for disk */
 
+typedef struct {
+  union {
+    struct {
+      char magic_num[4];
+      int fib;
+      int fdb;
+      int root;
+    } hdr;
+
+    char padding[DISK_BLOCK_SIZE];
+  };
+} super_block;
+
+typedef struct {
+  union {
+    struct {
+      char status;
+      int next;
+      int byte_count;
+      int d_ptrs[11];
+      int i_ptr;
+    } hdr;
+  
+    char padding[DISK_BLOCK_SIZE];
+  };
+} inode_block;
+
+typedef struct {
+  union {
+    struct {
+      char status;
+      int next;
+      char data[DATA_BLOCK_SIZE];
+    } hdr;
+  
+    char padding[DISK_BLOCK_SIZE];
+  };
+} data_block;
+
+enum { FREE = 1, IN_USE };
+  
+  
 typedef enum {
   DISK_READWRITE=0,
   DISK_READONLY=1
