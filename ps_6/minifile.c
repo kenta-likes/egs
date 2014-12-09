@@ -29,10 +29,11 @@ const char* disk_name;
 int INODE_START;
 int DATA_START;
 block_ctrl_t* block_array = NULL;
-semaphore_t disk_op_lock;
-disk_t* my_disk;
+semaphore_t disk_op_lock = NULL;
+disk_t* my_disk = NULL;
 
 /* FUNC DEFS */
+
 block_ctrl_t minifile_block_ctrl_create(void) {
   block_ctrl_t newb;
   
@@ -67,10 +68,13 @@ void minifile_ensure_exist_at(int idx) {
 }
 
 /*
- * This is the disk handler
+ * This is the disk handler. The disk handler will take care of
+ * taking a response from a disk operation for a specific block,
+ * placing the disk operation result into an array, and
+ * acting on the appropriate semaphore to wake up a waiting thread.
  */
 void 
-disk_handler(void* arg) {
+minifile_disk_handler(void* arg) {
   disk_interrupt_arg_t* block_arg;
   int block_num;
   interrupt_level_t l;
@@ -79,6 +83,7 @@ disk_handler(void* arg) {
   block_arg = (disk_interrupt_arg_t*)arg;
   block_num = block_arg->request.blocknum;
 
+  //check if the block number is within sensible bounds
   if (block_num > disk_size || block_num < 1 ){
     set_interrupt_level(l);
     printf("error: disk response with invalid parameters\n");
@@ -90,25 +95,6 @@ disk_handler(void* arg) {
   return;
 }
 
-
-int minifile_initialize(){
-  int i;
-  //call mkfs functions to creat the file system
- 
- 
-  //initialize the array
-  block_array = (block_ctrl_t*)calloc(disk_size, sizeof(block_ctrl_t));
-  for (i = 0; i < disk_size; i++){
-    //block_array[i] = block_ctrl_create();
-  }
-
-  //install a handler
-  install_disk_handler(disk_handler);
-
-  disk_op_lock = semaphore_create();
-  semaphore_initialize(disk_op_lock, 1);
-  return 0;
-}
 
 minifile_t minifile_creat(char *filename){
   return NULL;
@@ -193,5 +179,31 @@ void minifile_make_fs(void) {
   inode->u.hdr.status = FREE;
   data->u.hdr.status = FREE; 
   semaphore_V(disk_op_lock); 
+}
+
+
+/*
+ * Minifile initialize function
+ * Initializes the new disk (global vars are set by application)
+ * Intitializes the block array for semaphores/interrupt args to
+ * be stored.
+ * Installs the interrupt handler function
+ * Initializes the disk operation lock
+ * */
+int minifile_initialize(){
+  my_disk = (disk_t*)calloc(1, sizeof(disk_t));
+  disk_initialize(my_disk);
+  //call mkfs functions to creat the file system
+ 
+ 
+  //initialize the array
+  block_array = (block_ctrl_t*)calloc(disk_size, sizeof(block_ctrl_t));
+
+  //install a handler
+  install_disk_handler(minifile_disk_handler);
+
+  disk_op_lock = semaphore_create();
+  semaphore_initialize(disk_op_lock, 1);
+  return 0;
 }
 

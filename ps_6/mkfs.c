@@ -9,7 +9,6 @@
 int use_existing_disk;
 int disk_flags;
 int disk_size;
-disk_t* disk;
 
 int init(int* arg) {
   /*super_block super;
