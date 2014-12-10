@@ -79,9 +79,16 @@ typedef struct {
   } u;
 } data_block;
 
+
+/*TODO create create/destroy funcs for minifile and set block ptrs to NULL*/
 struct minifile {
   int inode_num;
-  int offset;
+  int byte_cursor;
+  inode_block i_block;
+  data_block indirect_block;
+  data_block d_block;
+  int block_cursor;
+  int block_total;
 };
 
 typedef struct block_ctrl{
@@ -195,6 +202,13 @@ void minifile_disk_handler(void* arg) {
   minifile_disk_error_handler(block_arg);
 }
 
+data_block* minifile_get_next_block(minifile_t file_ptr){
+  if (file_ptr->block_cursor >= file_ptr->block_total){
+    return NULL;
+  }
+  return NULL;
+}
+
 /*
  * Helper function to get block number from
  * a directory/file path
@@ -288,6 +302,7 @@ int minifile_get_block_from_path(char* path){
             else {
               curr_runner += name_len; //get to null character
             }
+            printf("Found directory %s\n", curr_dir_name);
             break;
           }
           else {
@@ -332,6 +347,7 @@ int minifile_get_block_from_path(char* path){
             else {
               curr_runner += name_len; //get to null character
             }
+            printf("Found directory %s\n", curr_dir_name);
             break;
           }
           else {
@@ -398,6 +414,15 @@ int minifile_unlink(char *filename){
 }
 
 int minifile_mkdir(char *dirname){
+  int name_len;
+
+  if (!dirname || dirname[0] == '\0'){
+    return -1;
+  }
+  
+  //clip off trailing /'s
+  name_len = strlen(dirname);
+  //if dirname[name_len-1] == 
   return -1;
 }
 
