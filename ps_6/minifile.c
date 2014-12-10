@@ -45,7 +45,7 @@ typedef struct {
       char status;
       int next;
       char type;
-      int byte_count;
+      int count;
       int d_ptrs[11];
       int i_ptr;
     } hdr;
@@ -346,7 +346,7 @@ void minifile_test_make_fs() {
 
   inode = (inode_block*)out;
   assert(inode->u.hdr.status == IN_USE);
-  assert(inode->u.hdr.byte_count == 0);
+  assert(inode->u.hdr.count == 0);
   
   block_num = free_iblock;
   while (block_num != 0) {
@@ -376,6 +376,7 @@ void minifile_make_fs(void) {
   inode_block* inode;
   data_block* data;
   int i;
+  dir_entry path;
   char* magic = "4411";
   
   super = (super_block*)calloc(1, sizeof(super_block));
@@ -397,12 +398,14 @@ void minifile_make_fs(void) {
  
   // root 
   inode->u.hdr.status = IN_USE;
-  inode->u.hdr.byte_count = 0; 
+  inode->u.hdr.type = DIR_t;
+  inode->u.hdr.count = 2; 
+  inode->d_ptrs[0] = DATA_START;
   disk_write_block(my_disk, 1, (char*)inode);
   semaphore_P(block_array[1]->block_sem);
 
   inode->u.hdr.status = FREE;
-  inode->u.hdr.byte_count = 0; 
+  inode->u.hdr.count = 0; 
 
   // make linked list of free inodes
   for (i = INODE_START; i < DATA_START - 1; i++) {
@@ -416,10 +419,18 @@ void minifile_make_fs(void) {
   disk_write_block(my_disk, DATA_START - 1, (char*)inode);
   semaphore_P(block_array[DATA_START - 1]->block_sem);
 
-  data->u.file_hdr.status = FREE;
+  data->u.dir_hdr.status = IN_USE;
+  path.name[0] = '.';
+  path.name[1] = '\0';
+  path.block_num = 1;
+  path.type = DIR_t;
+
+  memcpy((char*)(data->u.dir_hdr.data), (char*)&path, sizeof(dir_entry));
+  
+  
 
   // make linked list of free data blocks
-  for (i = DATA_START; i < BLOCK_COUNT - 1; i++) {
+  for (i = DATA_START + 1; i < BLOCK_COUNT - 1; i++) {
     data->u.file_hdr.next = i+1;
     disk_write_block(my_disk, i, (char*)data);
     semaphore_P(block_array[i]->block_sem);
