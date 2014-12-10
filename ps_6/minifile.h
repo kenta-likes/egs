@@ -15,6 +15,14 @@
 
 typedef struct minifile* minifile_t;
 
+void minifile_test_make_fs();
+
+/* Called in the mkfs application.
+ * Sets up the structure of the file system.
+ * Prints "File System created" on completion
+ */
+void minifile_make_fs();
+
 /*
  * Initializer function for the file system.
  * Takes care of defining and installing the disk interrupt handler

@@ -5,11 +5,8 @@
 #include "interrupts.h"
 
 #define DATA_BLOCK_SIZE (DISK_BLOCK_SIZE-sizeof(int)-1)
-/*
- * struct minifile:
- *     This is the structure that keeps the information about 
- *     the opened file like the position of the cursor, etc.
- */
+#define BLOCK_COUNT disk_size
+#define MAX_PATH_SIZE 256 //account for null character at end
 
 /* TYPE DEFS */
 
@@ -21,9 +18,11 @@ typedef struct {
     struct super_hdr {
       char magic_num[4];
       int block_count;
-      int free_iblocks; //head of free inode block list
-      int free_dblocks; //head of free data block list
-      int root; //block # of root dir
+      int free_iblock_hd;
+      int free_iblock_tl;
+      int free_dblock_hd;
+      int free_dblock_tl;
+      int root;
     } hdr;
 
     char padding[DISK_BLOCK_SIZE];
@@ -132,7 +131,7 @@ minifile_disk_handler(void* arg) {
   block_num = block_arg->request.blocknum;
 
   //check if the block number is within sensible bounds
-  if (block_num > disk_size || block_num < 1 ){
+  if (block_num > disk_size || block_num < 0){
     set_interrupt_level(l);
     printf("error: disk response with invalid parameters\n");
     return;
@@ -148,24 +147,57 @@ minifile_disk_handler(void* arg) {
  * a directory/file path
  * Returns: block number, -1 if path DNE
  * */
-int minifile_get_block_from_dir(char* path){
-  super_block s_block;
-  inode_block i_block;
-  char* curr_dir_name;
-  int read_end;
-  int i;
-  
-  curr_dir_name = path;
-  //this is a relative path
-  if (dirname[0] != '/'){
-    while (curr_dir_name[0] != '\0'){
-      //keep reading the path...
-    }
-    read_end = 
-  } //otherwise this is an absolute path
-  else {
-    curr_dir_name += 1;
+int minifile_get_block_from_dir(char* dir_path){
+  super_block* s_block;
+  inode_block* i_block;
+  char* abs_dir; //store absolute path here
+  char* curr_dir_name; //use for holding current directory name
+  char* curr_block;
+  //int read_end;
+  //int i;
+  int curr_block_num;
+
+  if (dir_path[0] == '\0'){
+    printf("ERROR: looking up empty string");
+    return -1;
   }
+  
+  //this is a relative path, so construct absolute path
+  if (dir_path[0] != '/'){
+    //add two to buffer size for extra '/' character and '\0' character at the end
+    abs_dir = (char*)calloc(strlen(minithread_get_curr_dir()) + strlen(dir_path) + 2, sizeof(char));
+    strcpy(abs_dir, minithread_get_curr_dir());
+    abs_dir[strlen(minithread_get_curr_dir())] = '/';
+    strcpy(abs_dir + strlen(minithread_get_curr_dir()) + 1, dir_path);
+  }
+  else { //otherwise it's an absolute path
+    abs_dir = (char*)calloc(strlen(dir_path) + 1, sizeof(char));
+    strcpy(abs_dir, dir_path);
+  }
+  curr_dir_name = abs_dir; //point to beginning
+
+  curr_block = (char*)calloc(1, sizeof(super_block));
+ 
+  //semaphore_P(disk_op_lock);........only reading, so maybe not necessary?
+  //read the super block
+  disk_read_block(my_disk, 0, (char*)curr_block);
+  semaphore_P(block_array[0]->block_sem);
+  s_block = (super_block*)curr_block;
+  
+  /* Do we need to check this?
+  if (memchk(s_block->u.hdr.magic_num, magic, 4) != 0){
+    printf("ERROR: Magic number does not match.\n");
+    return -1;
+  }
+  */
+  curr_block_num = s_block->u.hdr.root;
+  while (curr_dir_name[0] != '\0'){
+    disk_read_block(my_disk, curr_block_num, curr_block);
+    semaphore_P(block_array[curr_block_num]->block_sem);
+    i_block = (inode_block*)curr_block;
+  }
+  
+  return -1;
 
 }
 
@@ -224,10 +256,69 @@ char* minifile_pwd(void){
   return user_curr_dir;
 }
 
+void minifile_test_make_fs() {
+  super_block* super;
+  inode_block* inode;
+  data_block* data;
+  int block_num;
+  int free_iblock;
+  int free_dblock;
+  char* out;
+  
+  out = calloc(DISK_BLOCK_SIZE, sizeof(char));
+ 
+  semaphore_P(disk_op_lock); 
+  printf("enter minifile_test_make_fs\n");
+  
+  minifile_ensure_exist_at(0);
+  disk_read_block(my_disk, 0, out);
+  semaphore_P(block_array[0]->block_sem);
+  super = (super_block*)out;
+
+  assert(super->u.hdr.block_count == BLOCK_COUNT);
+  assert(super->u.hdr.root == 1);
+  free_iblock = super->u.hdr.free_iblock_hd;
+  free_dblock = super->u.hdr.free_dblock_hd;
+
+  block_num = super->u.hdr.root; 
+  minifile_ensure_exist_at(block_num);
+  disk_read_block(my_disk, block_num, out);
+  semaphore_P(block_array[block_num]->block_sem);
+
+  inode = (inode_block*)out;
+  assert(inode->u.hdr.status == IN_USE);
+  assert(inode->u.hdr.byte_count == 0);
+  
+  block_num = free_iblock;
+  while (block_num != 0) {
+    printf("free inode at %d\n", block_num);
+    minifile_ensure_exist_at(block_num);
+    disk_read_block(my_disk, block_num, out);
+    semaphore_P(block_array[block_num]->block_sem);
+    assert(inode->u.hdr.status == FREE);
+    block_num = inode->u.hdr.next; 
+  }
+
+  data = (data_block*)out;
+  block_num = free_dblock;
+  while (block_num != 0) {
+    printf("free data block at %d\n", block_num);
+    minifile_ensure_exist_at(block_num);
+    disk_read_block(my_disk, block_num, out);
+    semaphore_P(block_array[block_num]->block_sem);
+    assert(data->u.hdr.status == FREE);
+    block_num = data->u.hdr.next; 
+  }
+  
+  free(out);
+  printf("File System creation tested\n");
+}
+
 void minifile_make_fs(void) {
   super_block* super;
   inode_block* inode;
   data_block* data;
+  int i;
   char* out;
   char* magic = "4411";
   
@@ -237,27 +328,62 @@ void minifile_make_fs(void) {
   data = (data_block*)calloc(1, sizeof(inode_block));
  
   semaphore_P(disk_op_lock); 
+  printf("enter minifile_make_fs\n");
   INODE_START = 1;
   DATA_START = disk_size / 10;
   memcpy(super->u.hdr.magic_num, magic, 4);
-  super->u.hdr.block_count = disk_size;
-  super->u.hdr.fib = INODE_START + 1;
-  super->u.hdr.fdb = DATA_START + 1; 
+  super->u.hdr.block_count = BLOCK_COUNT;
+  super->u.hdr.free_iblock_hd = INODE_START + 1;
+  super->u.hdr.free_iblock_tl = DATA_START - 1;
+  super->u.hdr.free_dblock_hd = DATA_START; 
+  super->u.hdr.free_dblock_tl = BLOCK_COUNT - 1; 
   super->u.hdr.root = INODE_START;
   
-  disk_write_block(my_disk, 0, (char*)super);
-  minithread_sleep_with_timeout(100);
-  disk_read_block(my_disk, 0, out);
-  minithread_sleep_with_timeout(100);
-  printf("block_count: %d\n", ((super_block*)out)->u.hdr.block_count);
-  printf("first free inode: %d\n", ((super_block*)out)->u.hdr.fib);
-  printf("first free data block: %d\n", ((super_block*)out)->u.hdr.fdb);
-  printf("root at block: %d\n", ((super_block*)out)->u.hdr.root);
-  
   minifile_ensure_exist_at(0);
-  //semaphore_P(block_array[0]->block_sem);
+  disk_write_block(my_disk, 0, (char*)super);
+  semaphore_P(block_array[0]->block_sem);
+ 
+  // root 
+  inode->u.hdr.status = IN_USE;
+  inode->u.hdr.byte_count = 0; 
+  minifile_ensure_exist_at(1);
+  disk_write_block(my_disk, 1, (char*)inode);
+  semaphore_P(block_array[1]->block_sem);
+
   inode->u.hdr.status = FREE;
-  data->u.hdr.status = FREE; 
+  inode->u.hdr.byte_count = 0; 
+
+  // make linked list of free inodes
+  for (i = INODE_START + 1; i < DATA_START - 1; i++) {
+    inode->u.hdr.next = i+1;
+    minifile_ensure_exist_at(i);
+    disk_write_block(my_disk, i, (char*)inode);
+    semaphore_P(block_array[i]->block_sem);
+  }
+
+  // the last one is null terminated
+  inode->u.hdr.next = 0; 
+  minifile_ensure_exist_at(DATA_START - 1);
+  disk_write_block(my_disk, DATA_START - 1, (char*)inode);
+  semaphore_P(block_array[DATA_START - 1]->block_sem);
+
+  data->u.hdr.status = FREE;
+
+  // make linked list of free data blocks
+  for (i = DATA_START; i < BLOCK_COUNT - 1; i++) {
+    data->u.hdr.next = i+1;
+    minifile_ensure_exist_at(i);
+    disk_write_block(my_disk, i, (char*)data);
+    semaphore_P(block_array[i]->block_sem);
+  }
+ 
+  // the last one is null terminated
+  data->u.hdr.next = 0; 
+  minifile_ensure_exist_at(BLOCK_COUNT - 1);
+  disk_write_block(my_disk, BLOCK_COUNT - 1, (char*)data);
+  semaphore_P(block_array[BLOCK_COUNT - 1]->block_sem);
+
+  printf("File System created.\n");
   semaphore_V(disk_op_lock); 
 }
 
@@ -272,6 +398,7 @@ void minifile_make_fs(void) {
  * */
 int minifile_initialize(){
   my_disk = (disk_t*)calloc(1, sizeof(disk_t));
+  disk_name = "MINIFILESYSTEM";
   disk_initialize(my_disk);
   //call mkfs functions to creat the file system
  
