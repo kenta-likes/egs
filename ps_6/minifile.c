@@ -81,14 +81,14 @@ typedef struct {
 
 
 /*TODO create create/destroy funcs for minifile and set block ptrs to NULL*/
-struct minifile {
+typedef struct minifile {
   int inode_num;
   int byte_cursor;
   inode_block i_block;
   data_block indirect_block;
   data_block d_block;
   int block_cursor;
-};
+} minifile;
 
 typedef struct block_ctrl{
   semaphore_t block_sem;
@@ -251,22 +251,18 @@ int minifile_get_next_block(minifile_t file_ptr){
 }
 
 /*
- * Helper function to get block number from
- * a directory/file path
+ * Helper function to get block number from a directory/file path
  * Returns: block number, -1 if path DNE
  *
  * Assumes: 
  * -nonempty path input
  * */
 int minifile_get_block_from_path(char* path){
+  minifile_t tmp_file;
   super_block* s_block;
-  inode_block* i_block;
-  data_block* d_block;
-  data_block* indirect_block;
   char* abs_dir; //store absolute path here
   char* curr_dir_name; //use for holding current directory name
   char* curr_runner; //use for going through path
-  char* curr_block;
   int name_len;
   int i;
   int j;
@@ -276,9 +272,7 @@ int minifile_get_block_from_path(char* path){
   int is_dir;
 
   curr_dir_name = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char));
-
-  semaphore_P(disk_op_lock);
-  
+  tmp_file = (minifile_t)calloc(1, sizeof(minifile));
   //this is a relative path, so construct absolute path
   if (path[0] != '/'){
     i = strlen(minithread_get_curr_dir()); //use i as temp variable
@@ -292,26 +286,26 @@ int minifile_get_block_from_path(char* path){
     abs_dir = (char*)calloc(strlen(path) + 1, sizeof(char));
     strcpy(abs_dir, path);
   }
+  s_block = (super_block*)calloc(1, sizeof(super_block)); //make space for block container
+
+  semaphore_P(disk_op_lock); //grab disk operation lock
 
   curr_runner = abs_dir; //point to beginning
   printf("Absolute path is %s\n", abs_dir); //TODO: Check output
 
-  curr_block = (char*)calloc(1, sizeof(super_block)); //make space for block container
  
   //read the super block
-  disk_read_block(my_disk, 0, (char*)curr_block);
+  disk_read_block(my_disk, 0, (char*)s_block);
   semaphore_P(block_array[0]->block_sem);
-  s_block = (super_block*)curr_block;
-  
+
   curr_block_num = s_block->u.hdr.root; //grab the root block number
   curr_runner += 1; //move curr_runner past '/'
   is_dir = 1;
   while (curr_runner[0] != '\0'){
     if (strchr(curr_runner, '/') == NULL){ //check if '/' is not in path
-      //this can be a file or dir, but the last one
+      //last name in path, can be file or a directory
       name_len = strlen(curr_runner);
-      memcpy(curr_dir_name, curr_runner, name_len);
-      curr_dir_name[name_len] = '\0'; //null terminate to make string
+      memcpy(curr_dir_name, curr_runner, name_len+1); //copy everything including null char
       is_dir = 0;
     }
     else {
@@ -321,22 +315,23 @@ int minifile_get_block_from_path(char* path){
       is_dir = 1;
     }
 
-    disk_read_block(my_disk, curr_block_num, curr_block); //read in the block from the current block number
+    disk_read_block(my_disk, curr_block_num, (char*)(&tmp_file->i_block) );
     semaphore_P(block_array[curr_block_num]->block_sem);
-    i_block = (inode_block*)curr_block; //next directory to explore
+    tmp_file->inode_num = curr_block_num; //init tmp_file before iterator
+    tmp_file->block_cursor = 0;
     curr_block_num = -1; //set to -1 to check at end of loop
     entries_read = 0; //set to 0 before reading
-    entries_total = i_block->u.hdr.count;
-    for (i = 0; i < 11 && entries_read < entries_total && curr_block_num == -1; i++){ //iterate over direct entries...
-      disk_read_block(my_disk, i_block->u.hdr.d_ptrs[i], curr_block);
-      semaphore_P(block_array[i_block->u.hdr.d_ptrs[i]]->block_sem);
-      d_block = (data_block*)curr_block; //data block to check
-      for (j = 0; j < MAX_DIR_ENTRIES_PER_BLOCK && entries_read < entries_total; j++){
+    entries_total = tmp_file->i_block.u.hdr.count;
+    while ( entries_read < entries_total
+            && curr_block_num == -1
+            && minifile_get_next_block(tmp_file) == 0 ){
+      //search through the directory
+      for (i = 0; i < MAX_DIR_ENTRIES_PER_BLOCK && entries_read < entries_total; i++){
         //name match
-        if (strcmp(curr_dir_name, d_block->u.dir_hdr.data[j].name) == 0){
-          if (!is_dir || (is_dir && d_block->u.dir_hdr.data[j].type == DIR_t) ) { // if directory
-            // save the block number, move curr_runner up to the next directory
-            curr_block_num = d_block->u.dir_hdr.data[j].block_num;
+        if (strcmp(curr_dir_name, tmp_file->d_block.u.dir_hdr.data[i].name) == 0){
+          //check if it has to be a directory & if so, if inode is directory type
+          if (!is_dir || (is_dir && tmp_file->d_block.u.dir_hdr.data[i].type == DIR_t)) {
+            curr_block_num = tmp_file->d_block.u.dir_hdr.data[i].block_num;
             if (is_dir){
               curr_runner += name_len + 1; //get past the next '/' char
             }
@@ -350,84 +345,29 @@ int minifile_get_block_from_path(char* path){
             semaphore_V(disk_op_lock);
             free(curr_dir_name);//make sure to free before return
             free(abs_dir);
-            free(curr_block);
+            free(s_block);
+            free(tmp_file);
             return -1; //could not find directory with the right name
           }
         }
-        // else continue with for loop
         entries_read++;
       }
     }
-    if (curr_block_num != -1){
-      break; //since valid block was found
-    }
-    if (entries_read >= entries_total){
+    if ( curr_block_num == -1 ) { //not found
       semaphore_V(disk_op_lock);
       free(curr_dir_name);//make sure to free before return
       free(abs_dir);
-      free(curr_block);
+      free(s_block);
+      free(tmp_file);
       return -1; //error case
-    }
-    //if still not found, read in indirect block
-    disk_read_block(my_disk, i_block->u.hdr.i_ptr, curr_block);
-    semaphore_P(block_array[i_block->u.hdr.i_ptr]->block_sem);
-    indirect_block = (data_block*)curr_block; //data block to check
-    for (i = 0; i < MAX_INDIRECT_BLOCKNUM && entries_read < entries_total && curr_block_num == -1; i++){ //iterate over direct entries...
-      disk_read_block(my_disk, indirect_block->u.indirect_hdr.d_ptrs[i], curr_block);
-      semaphore_P(block_array[indirect_block->u.indirect_hdr.d_ptrs[i]]->block_sem);
-      d_block = (data_block*)curr_block; //data block to check
-      for (j = 0; j < MAX_DIR_ENTRIES_PER_BLOCK && entries_read < entries_total; j++){
-        //name match
-        if (strcmp(curr_dir_name, d_block->u.dir_hdr.data[j].name) == 0){
-          if (!is_dir || (is_dir && d_block->u.dir_hdr.data[j].type == DIR_t) ) { // if directory
-            // save the block number, move curr_runner up to the next directory
-            curr_block_num = d_block->u.dir_hdr.data[j].block_num;
-            if (is_dir){
-              curr_runner += name_len + 1; //get past the next '/' char
-            }
-            else {
-              curr_runner += name_len; //get to null character
-            }
-            printf("Found directory %s\n", curr_dir_name);
-            break;
-          }
-          else {
-            semaphore_V(disk_op_lock);
-            free(curr_dir_name);//make sure to free before return
-            free(abs_dir);
-            free(curr_block);
-            return -1; //could not find directory with the right name
-          }
-        }
-        // else continue with for loop
-        entries_read++;
-      }
-    }
-    if (curr_block_num != -1){
-      break; //since valid block was found
-    }
-    if (entries_read >= entries_total){
-      semaphore_V(disk_op_lock);
-      free(curr_dir_name);//make sure to free before return
-      free(abs_dir);
-      free(curr_block);
-      return -1; //error case
-    }
-    else {
-      //otherwise loop exited after visiting everything. error case
-      semaphore_V(disk_op_lock);
-      free(curr_dir_name);//make sure to free before return
-      free(abs_dir);
-      free(curr_block);
-      return -1;
     }
   }
   semaphore_V(disk_op_lock);
   free(curr_dir_name);//make sure to free before return
   free(abs_dir);
-  free(curr_block);
+  free(tmp_file);
+  free(s_block);
   return curr_block_num;
-
 }
 
 minifile_t minifile_creat(char *filename){
