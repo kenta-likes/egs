@@ -44,6 +44,7 @@ typedef struct {
     struct inode_hdr {
       char status;
       int next;
+      char type;
       int byte_count;
       int d_ptrs[11];
       int i_ptr;
@@ -72,13 +73,15 @@ typedef struct {
 } data_block;
 
 struct minifile {
-  /* add members here */
-  int dummy;
+  int inode_num;
+  int offset;
 };
 
 typedef struct block_ctrl{
   semaphore_t block_sem;
   disk_interrupt_arg_t* block_arg;
+  
+  char* buff;
 } block_ctrl;
 
 typedef block_ctrl* block_ctrl_t;
@@ -92,7 +95,7 @@ const char* disk_name;
 block_ctrl_t* block_array = NULL;
 semaphore_t disk_op_lock = NULL;
 disk_t* my_disk = NULL;
-semaphore_t* inode_table;
+semaphore_t* inode_lock_table;
 
 /* FUNC DEFS */
 
@@ -123,14 +126,44 @@ int minifile_block_ctrl_destroy(block_ctrl_t b) {
   return 0;
 }
 
+void minifile_fix_fs(){
+  // TODO
+  return;
+
+}
+
+void minifile_disk_error_handler(disk_interrupt_arg_t* block_arg) {
+  semaphore_P(disk_op_lock);
+
+  switch (block_arg->reply) {
+  case DISK_REPLY_FAILED:
+    // gotta try again yo
+    disk_send_request(block_arg->disk, block_arg->request.blocknum, 
+        block_arg->request.buffer, block_arg->request.type);
+    break;
+
+  case DISK_REPLY_ERROR:
+    printf("DISK_REPLY_ERROR wuttttt\n");
+    break;
+
+  case DISK_REPLY_CRASHED:
+    minifile_fix_fs();
+    break;
+  
+  default:
+    break;
+  }
+  free(block_arg);
+  semaphore_V(disk_op_lock);
+}
+
 /*
  * This is the disk handler. The disk handler will take care of
  * taking a response from a disk operation for a specific block,
  * placing the disk operation result into an array, and
  * acting on the appropriate semaphore to wake up a waiting thread.
  */
-void 
-minifile_disk_handler(void* arg) {
+void minifile_disk_handler(void* arg) {
   disk_interrupt_arg_t* block_arg;
   int block_num;
   interrupt_level_t l;
@@ -145,10 +178,14 @@ minifile_disk_handler(void* arg) {
     printf("error: disk response with invalid parameters\n");
     return;
   }
-  block_array[block_num]->block_arg = block_arg;
-  semaphore_V(block_array[block_num]->block_sem);
+  if (block_arg->reply == DISK_REPLY_OK) {
+    block_array[block_num]->block_arg = block_arg;
+    semaphore_V(block_array[block_num]->block_sem);
+    set_interrupt_level(l);
+    return;
+  }
   set_interrupt_level(l);
-  return;
+  minifile_disk_error_handler(block_arg);
 }
 
 /*
@@ -156,7 +193,7 @@ minifile_disk_handler(void* arg) {
  * a directory/file path
  * Returns: block number, -1 if path DNE
  * */
-int minifile_get_block_from_dir(char* dir_path){
+int minifile_get_block_from_path(char* dir_path){
   super_block* s_block;
   inode_block* i_block;
   char* abs_dir; //store absolute path here
@@ -253,6 +290,19 @@ int minifile_cd(char *path){
 }
 
 char **minifile_ls(char *path){
+  int block_num;
+  inode_block* inode;
+
+  semaphore_P(disk_op_lock);
+  block_num = minifile_get_block_from_path(path);
+  if (block_num == -1) {
+    semaphore_V(disk_op_lock);
+    return NULL;
+  } 
+  inode = (inode_block*)calloc(1, sizeof(inode_block));
+  disk_read_block(my_disk, block_num, (char*)inode);
+  semaphore_P(block_array[block_num]->block_sem);
+  semaphore_V(disk_op_lock);
   return NULL;
 }
 
@@ -411,10 +461,10 @@ int minifile_initialize(){
     block_array[i] = minifile_block_ctrl_create();
   }
 
-  inode_table = (semaphore_t*)calloc(DATA_START, sizeof(semaphore_t));
+  inode_lock_table = (semaphore_t*)calloc(DATA_START, sizeof(semaphore_t));
   for (i = 0; i < DATA_START; i++) {
-    inode_table[i] = semaphore_create();
-    semaphore_initialize(inode_table[i], 1);
+    inode_lock_table[i] = semaphore_create();
+    semaphore_initialize(inode_lock_table[i], 1);
   }
 
   //install a handler
