@@ -88,6 +88,7 @@ struct minifile {
   data_block indirect_block;
   data_block d_block;
   int block_cursor;
+  char mode;
 };
 
 typedef struct block_ctrl{
@@ -101,6 +102,7 @@ typedef block_ctrl* block_ctrl_t;
 
 enum { FREE = 1, IN_USE };
 enum { DIR_t = 1, FILE_t };
+enum { READ = 0, WRITE, READ_WRITE, APPEND, READ_APPEND };
 
 /* GLOBAL VARS */
 int disk_size;
@@ -434,6 +436,45 @@ minifile_t minifile_creat(char *filename){
 }
 
 minifile_t minifile_open(char *filename, char *mode){
+  minifile_t handle;
+
+  semaphore_P(disk_op_lock);
+  printf("enter minifile_open\n");
+
+  handle = (minifile_t)calloc(1, sizeof(struct minifile));
+
+  if (!strcmp(mode, "r")) {  
+    handle->mode = READ;
+  }
+  else if (!strcmp(mode, "r+") || !strcmp(mode, "w+")) {  
+    handle->mode = READ_WRITE;
+  }
+  else if (!strcmp(mode, "w")) {  
+    handle->mode = WRITE;
+  }
+  else if (!strcmp(mode, "a")) {  
+    handle->mode = APPEND;
+  }
+  else if (!strcmp(mode, "a+")) {  
+    handle->mode = READ_APPEND;
+  }
+  else {
+    printf("mode not recognized\n");
+    free(handle);
+    return NULL;
+  }
+
+  handle->inode_num = minifile_get_block_from_path(filename);
+
+  if (handle->inode_num == -1) {
+    free(handle);
+    printf("%s", filename);
+    printf(": No such file or directory\n");
+    semaphore_V(disk_op_lock);
+    return NULL;
+  }  
+
+  semaphore_V(disk_op_lock);
   return NULL;
 }
 
