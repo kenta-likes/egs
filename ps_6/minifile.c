@@ -88,7 +88,6 @@ struct minifile {
   data_block indirect_block;
   data_block d_block;
   int block_cursor;
-  int block_total;
 };
 
 typedef struct block_ctrl{
@@ -202,11 +201,53 @@ void minifile_disk_handler(void* arg) {
   minifile_disk_error_handler(block_arg);
 }
 
-data_block* minifile_get_next_block(minifile_t file_ptr){
-  if (file_ptr->block_cursor >= file_ptr->block_total){
-    return NULL;
+
+/*
+ * Reads the next block of data from the file
+ * Returns 0 on success, -1 on failure
+ * */
+int minifile_get_next_block(minifile_t file_ptr){
+  int block_total;
+  int index;
+
+  block_total = 0; //initialize to 0
+  if (file_ptr->i_block.u.hdr.type == FILE_t){
+    block_total = file_ptr->i_block.u.hdr.count / DATA_BLOCK_SIZE;
+    //if not divisible, add 1 to get ceiling
+    if (block_total % file_ptr->i_block.u.hdr.count / DATA_BLOCK_SIZE != 0){
+      block_total++;
+    }
   }
-  return NULL;
+  else {
+    block_total = file_ptr->i_block.u.hdr.count / MAX_DIR_ENTRIES_PER_BLOCK;
+    if (block_total % file_ptr->i_block.u.hdr.count / MAX_DIR_ENTRIES_PER_BLOCK != 0){
+      block_total++;
+    }
+  }
+
+  if (file_ptr->block_cursor >= block_total){
+    return -1;
+  }
+
+  index = file_ptr->block_cursor;
+
+  if (index < 11){
+    //still direct block
+    disk_read_block(my_disk, file_ptr->i_block.u.hdr.d_ptrs[index], (char*)(&file_ptr->d_block) );
+    semaphore_P(block_array[file_ptr->i_block.u.hdr.d_ptrs[index]]->block_sem);
+  }
+  else {
+    index -= 11; //get index in indirect block
+    if (index == 0){
+      //first block in indirect block, so read in the indirect block
+      disk_read_block(my_disk, file_ptr->i_block.u.hdr.i_ptr, (char*)(&file_ptr->indirect_block) );
+      semaphore_P(block_array[file_ptr->i_block.u.hdr.i_ptr]->block_sem);
+    }
+    disk_read_block(my_disk, file_ptr->indirect_block.u.indirect_hdr.d_ptrs[index], (char*)(&file_ptr->d_block) );
+    semaphore_P(block_array[file_ptr->indirect_block.u.indirect_hdr.d_ptrs[index]]->block_sem);
+  }
+  file_ptr->block_cursor++;
+  return 0;
 }
 
 /*
