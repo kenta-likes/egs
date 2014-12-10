@@ -202,11 +202,11 @@ void minifile_disk_handler(void* arg) {
   minifile_disk_error_handler(block_arg);
 }
 
-data_block* minifile_get_next_block(minifile_t file_ptr){
+int minifile_get_next_block(minifile_t file_ptr){
   if (file_ptr->block_cursor >= file_ptr->block_total){
-    return NULL;
+    return -1;
   }
-  return NULL;
+  return -1;
 }
 
 /*
@@ -414,14 +414,14 @@ int minifile_unlink(char *filename){
 }
 
 int minifile_mkdir(char *dirname){
-  int name_len;
+  //int name_len;
 
   if (!dirname || dirname[0] == '\0'){
     return -1;
   }
   
   //clip off trailing /'s
-  name_len = strlen(dirname);
+  //name_len = strlen(dirname);
   //if dirname[name_len-1] == 
   return -1;
 }
@@ -439,20 +439,67 @@ int minifile_cd(char *path){
 }
 
 char **minifile_ls(char *path){
-  int block_num;
-  inode_block* inode;
+  minifile_t handle;
+  char** file_list;
+  int i,j;
+  char* tmp;
 
   semaphore_P(disk_op_lock);
-  block_num = minifile_get_block_from_path(path);
-  if (block_num == -1) {
+  printf("enter minifile_ls\n");
+
+  handle = (minifile_t)calloc(1, sizeof(struct minifile)); 
+  handle->inode_num = minifile_get_block_from_path(path);
+
+  if (handle->inode_num == -1) {
+    free(handle);
+    printf("%s", path);
+    printf(": No such file or directory\n");
     semaphore_V(disk_op_lock);
     return NULL;
-  } 
-  inode = (inode_block*)calloc(1, sizeof(inode_block));
-  disk_read_block(my_disk, block_num, (char*)inode);
-  semaphore_P(block_array[block_num]->block_sem);
+  }  
+
+  if (minifile_get_next_block(handle) == -1) {
+    free(handle);
+    semaphore_V(disk_op_lock);
+    return NULL;
+  }
+    
+  if (handle->i_block.u.hdr.type == FILE_t) {
+    printf("ls called on a file type\n");
+    free(handle);
+    file_list = (char**)calloc(2, sizeof(char*));
+    file_list[0] = path; 
+    semaphore_V(disk_op_lock);
+    return file_list;
+  }
+  
+  file_list = (char**)calloc(handle->i_block.u.hdr.count + 1, sizeof(char*));
+ 
+  printf("dir count is %d\n", handle->i_block.u.hdr.count);
+  // we got a directory yo
+  for (i = 0; i < handle->i_block.u.hdr.count; i++) {
+    for (j = 0; ((j+i) < handle->i_block.u.hdr.count) &&
+        (j < MAX_DIR_ENTRIES_PER_BLOCK); j++) {
+      printf("reading the number %d entry\n", j+i);
+      tmp = (char*)calloc(257, sizeof(char));
+      strcpy(tmp, handle->d_block.u.dir_hdr.data[j].name);
+      file_list[j+i] = tmp;
+    }
+    // copied an entire data block yo
+    // get the next one, if exists
+    if (((j+i) < handle->i_block.u.hdr.count) 
+         && minifile_get_next_block(handle) == -1) {
+      free(handle);
+      semaphore_V(disk_op_lock);
+      return file_list; 
+    }
+    i += j;
+  }; 
+
+  free(handle);
   semaphore_V(disk_op_lock);
-  return NULL;
+  printf("exit ls on success\n");
+  return file_list; 
 }
 
 /*
@@ -461,8 +508,10 @@ char **minifile_ls(char *path){
 char* minifile_pwd(void){
   char* user_curr_dir;
 
+  semaphore_P(disk_op_lock); 
   user_curr_dir = (char*)calloc(strlen(minithread_get_curr_dir()) + 1, sizeof(char));
   strcpy(user_curr_dir, minithread_get_curr_dir());
+  semaphore_V(disk_op_lock); 
   return user_curr_dir;
 }
 
@@ -529,6 +578,7 @@ void minifile_test_make_fs() {
     block_num = data->u.file_hdr.next; 
   }
   
+  semaphore_V(disk_op_lock); 
   free(out);
   printf("File System creation tested\n");
 }
