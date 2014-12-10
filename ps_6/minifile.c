@@ -9,7 +9,7 @@
 #define MAX_PATH_SIZE 256 //account for null character at end
 #define MAX_DIR_ENTRIES_PER_BLOCK (DATA_BLOCK_SIZE/sizeof(dir_entry)) 
 #define INODE_START 2
-#define DATA_START (BLOCK_COUNT/10)
+#define DATA_START (BLOCK_COUNT/10+1)
 #define MAX_INDIRECT_BLOCKNUM DATA_BLOCK_SIZE/sizeof(int)
 
 
@@ -200,7 +200,6 @@ void minifile_disk_handler(void* arg) {
   set_interrupt_level(l);
   minifile_disk_error_handler(block_arg);
 }
-
 
 /*
  * Reads the next block of data from the file
@@ -395,14 +394,14 @@ int minifile_unlink(char *filename){
 }
 
 int minifile_mkdir(char *dirname){
-  int name_len;
+  //int name_len;
 
   if (!dirname || dirname[0] == '\0'){
     return -1;
   }
   
   //clip off trailing /'s
-  name_len = strlen(dirname);
+  //name_len = strlen(dirname);
   //if dirname[name_len-1] == 
   return -1;
 }
@@ -420,20 +419,67 @@ int minifile_cd(char *path){
 }
 
 char **minifile_ls(char *path){
-  int block_num;
-  inode_block* inode;
+  minifile_t handle;
+  char** file_list;
+  int i,j;
+  char* tmp;
 
   semaphore_P(disk_op_lock);
-  block_num = minifile_get_block_from_path(path);
-  if (block_num == -1) {
+  printf("enter minifile_ls\n");
+
+  handle = (minifile_t)calloc(1, sizeof(struct minifile)); 
+  handle->inode_num = minifile_get_block_from_path(path);
+
+  if (handle->inode_num == -1) {
+    free(handle);
+    printf("%s", path);
+    printf(": No such file or directory\n");
     semaphore_V(disk_op_lock);
     return NULL;
-  } 
-  inode = (inode_block*)calloc(1, sizeof(inode_block));
-  disk_read_block(my_disk, block_num, (char*)inode);
-  semaphore_P(block_array[block_num]->block_sem);
+  }  
+
+  if (minifile_get_next_block(handle) == -1) {
+    free(handle);
+    semaphore_V(disk_op_lock);
+    return NULL;
+  }
+    
+  if (handle->i_block.u.hdr.type == FILE_t) {
+    printf("ls called on a file type\n");
+    free(handle);
+    file_list = (char**)calloc(2, sizeof(char*));
+    file_list[0] = path; 
+    semaphore_V(disk_op_lock);
+    return file_list;
+  }
+  
+  file_list = (char**)calloc(handle->i_block.u.hdr.count + 1, sizeof(char*));
+ 
+  printf("dir count is %d\n", handle->i_block.u.hdr.count);
+  // we got a directory yo
+  for (i = 0; i < handle->i_block.u.hdr.count; i++) {
+    for (j = 0; ((j+i) < handle->i_block.u.hdr.count) &&
+        (j < MAX_DIR_ENTRIES_PER_BLOCK); j++) {
+      printf("reading the number %d entry\n", j+i);
+      tmp = (char*)calloc(257, sizeof(char));
+      strcpy(tmp, handle->d_block.u.dir_hdr.data[j].name);
+      file_list[j+i] = tmp;
+    }
+    // copied an entire data block yo
+    // get the next one, if exists
+    if (((j+i) < handle->i_block.u.hdr.count) 
+         && minifile_get_next_block(handle) == -1) {
+      free(handle);
+      semaphore_V(disk_op_lock);
+      return file_list; 
+    }
+    i += j;
+  }; 
+
+  free(handle);
   semaphore_V(disk_op_lock);
-  return NULL;
+  printf("exit ls on success\n");
+  return file_list; 
 }
 
 /*
@@ -442,8 +488,10 @@ char **minifile_ls(char *path){
 char* minifile_pwd(void){
   char* user_curr_dir;
 
+  semaphore_P(disk_op_lock); 
   user_curr_dir = (char*)calloc(strlen(minithread_get_curr_dir()) + 1, sizeof(char));
   strcpy(user_curr_dir, minithread_get_curr_dir());
+  semaphore_V(disk_op_lock); 
   return user_curr_dir;
 }
 
@@ -476,7 +524,20 @@ void minifile_test_make_fs() {
 
   inode = (inode_block*)out;
   assert(inode->u.hdr.status == IN_USE);
-  assert(inode->u.hdr.count == 0);
+  assert(inode->u.hdr.count == 2);
+
+  // get dir entries
+  block_num = inode->u.hdr.d_ptrs[0]; 
+  disk_read_block(my_disk, block_num, out);
+  semaphore_P(block_array[block_num]->block_sem);
+
+  assert(((data_block*)out)->u.dir_hdr.status == IN_USE);
+  assert(!strcmp(((data_block*)out)->u.dir_hdr.data[0].name,"."));
+  assert(((data_block*)out)->u.dir_hdr.data[0].block_num == 1);
+  assert(((data_block*)out)->u.dir_hdr.data[0].type == DIR_t);
+  assert(!strcmp(((data_block*)out)->u.dir_hdr.data[1].name,".."));
+  assert(((data_block*)out)->u.dir_hdr.data[1].block_num == 1);
+  assert(((data_block*)out)->u.dir_hdr.data[1].type == DIR_t);
   
   block_num = free_iblock;
   while (block_num != 0) {
@@ -497,6 +558,7 @@ void minifile_test_make_fs() {
     block_num = data->u.file_hdr.next; 
   }
   
+  semaphore_V(disk_op_lock); 
   free(out);
   printf("File System creation tested\n");
 }
@@ -506,6 +568,7 @@ void minifile_make_fs(void) {
   inode_block* inode;
   data_block* data;
   int i;
+  dir_entry path;
   char* magic = "4411";
   
   super = (super_block*)calloc(1, sizeof(super_block));
@@ -518,7 +581,7 @@ void minifile_make_fs(void) {
   super->u.hdr.block_count = BLOCK_COUNT;
   super->u.hdr.free_iblock_hd = INODE_START;
   super->u.hdr.free_iblock_tl = DATA_START - 1;
-  super->u.hdr.free_dblock_hd = DATA_START; 
+  super->u.hdr.free_dblock_hd = DATA_START + 1; 
   super->u.hdr.free_dblock_tl = BLOCK_COUNT - 1; 
   super->u.hdr.root = 1;
   
@@ -527,7 +590,9 @@ void minifile_make_fs(void) {
  
   // root 
   inode->u.hdr.status = IN_USE;
-  inode->u.hdr.count = 0; 
+  inode->u.hdr.type = DIR_t;
+  inode->u.hdr.count = 2; 
+  inode->u.hdr.d_ptrs[0] = DATA_START;
   disk_write_block(my_disk, 1, (char*)inode);
   semaphore_P(block_array[1]->block_sem);
 
@@ -546,10 +611,25 @@ void minifile_make_fs(void) {
   disk_write_block(my_disk, DATA_START - 1, (char*)inode);
   semaphore_P(block_array[DATA_START - 1]->block_sem);
 
-  data->u.file_hdr.status = FREE;
+  data->u.dir_hdr.status = IN_USE;
+  path.name[0] = '.';
+  path.name[1] = '\0';
+  path.block_num = 1;
+  path.type = DIR_t;
 
+  memcpy((char*)(data->u.dir_hdr.data), (char*)&path, sizeof(dir_entry));
+  
+  path.name[1] = '.';
+  path.name[2] = '\0';
+  
+  memcpy((char*)&(data->u.dir_hdr.data[1]), (char*)&path, sizeof(dir_entry));
+
+  disk_write_block(my_disk, DATA_START, (char*)data);
+  semaphore_P(block_array[DATA_START]->block_sem);
+
+  data->u.file_hdr.status = FREE;
   // make linked list of free data blocks
-  for (i = DATA_START; i < BLOCK_COUNT - 1; i++) {
+  for (i = DATA_START + 1; i < BLOCK_COUNT - 1; i++) {
     data->u.file_hdr.next = i+1;
     disk_write_block(my_disk, i, (char*)data);
     semaphore_P(block_array[i]->block_sem);
