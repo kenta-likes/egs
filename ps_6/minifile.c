@@ -282,7 +282,12 @@ int minifile_get_block_from_path(char* path){
           if (!is_dir || (is_dir && d_block->u.dir_hdr.data[j].type == DIR_t) ) { // if directory
             // save the block number, move curr_runner up to the next directory
             curr_block_num = d_block->u.dir_hdr.data[j].block_num;
-            curr_runner += name_len + 1; //get past the next '/' char
+            if (is_dir){
+              curr_runner += name_len + 1; //get past the next '/' char
+            }
+            else {
+              curr_runner += name_len; //get to null character
+            }
             break;
           }
           else {
@@ -321,7 +326,12 @@ int minifile_get_block_from_path(char* path){
           if (!is_dir || (is_dir && d_block->u.dir_hdr.data[j].type == DIR_t) ) { // if directory
             // save the block number, move curr_runner up to the next directory
             curr_block_num = d_block->u.dir_hdr.data[j].block_num;
-            curr_runner += name_len + 1; //get past the next '/' char
+            if (is_dir){
+              curr_runner += name_len + 1; //get past the next '/' char
+            }
+            else {
+              curr_runner += name_len; //get to null character
+            }
             break;
           }
           else {
