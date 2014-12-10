@@ -6,6 +6,7 @@
 
 #define DATA_BLOCK_SIZE (DISK_BLOCK_SIZE-sizeof(int)-1)
 #define BLOCK_COUNT disk_size
+#define MAX_PATH_SIZE 256 //account for null character at end
 
 /* TYPE DEFS */
 
@@ -144,6 +145,64 @@ minifile_disk_handler(void* arg) {
   return;
 }
 
+/*
+ * Helper function to get block number from
+ * a directory/file path
+ * Returns: block number, -1 if path DNE
+ * */
+int minifile_get_block_from_dir(char* dir_path){
+  super_block* s_block;
+  inode_block* i_block;
+  char* abs_dir; //store absolute path here
+  char* curr_dir_name; //use for holding current directory name
+  char* curr_block;
+  //int read_end;
+  //int i;
+  int curr_block_num;
+
+  if (dir_path[0] == '\0'){
+    printf("ERROR: looking up empty string");
+    return -1;
+  }
+  
+  //this is a relative path, so construct absolute path
+  if (dir_path[0] != '/'){
+    //add two to buffer size for extra '/' character and '\0' character at the end
+    abs_dir = (char*)calloc(strlen(minithread_get_curr_dir()) + strlen(dir_path) + 2, sizeof(char));
+    strcpy(abs_dir, minithread_get_curr_dir());
+    abs_dir[strlen(minithread_get_curr_dir())] = '/';
+    strcpy(abs_dir + strlen(minithread_get_curr_dir()) + 1, dir_path);
+  }
+  else { //otherwise it's an absolute path
+    abs_dir = (char*)calloc(strlen(dir_path) + 1, sizeof(char));
+    strcpy(abs_dir, dir_path);
+  }
+  curr_dir_name = abs_dir; //point to beginning
+
+  curr_block = (char*)calloc(1, sizeof(super_block));
+ 
+  //semaphore_P(disk_op_lock);........only reading, so maybe not necessary?
+  //read the super block
+  disk_read_block(my_disk, 0, (char*)curr_block);
+  semaphore_P(block_array[0]->block_sem);
+  s_block = (super_block*)curr_block;
+  
+  /* Do we need to check this?
+  if (memchk(s_block->u.hdr.magic_num, magic, 4) != 0){
+    printf("ERROR: Magic number does not match.\n");
+    return -1;
+  }
+  */
+  curr_block_num = s_block->u.hdr.root;
+  while (curr_dir_name[0] != '\0'){
+    disk_read_block(my_disk, curr_block_num, curr_block);
+    semaphore_P(block_array[curr_block_num]->block_sem);
+    i_block = (inode_block*)curr_block;
+  }
+  
+  return -1;
+
+}
 
 minifile_t minifile_creat(char *filename){
   return NULL;
@@ -189,8 +248,15 @@ char **minifile_ls(char *path){
   return NULL;
 }
 
+/*
+ * returns the current directory by strcpy-ing the curr_dir
+ * */
 char* minifile_pwd(void){
-  return NULL;
+  char* user_curr_dir;
+
+  user_curr_dir = (char*)calloc(strlen(minithread_get_curr_dir()) + 1, sizeof(char));
+  strcpy(user_curr_dir, minithread_get_curr_dir());
+  return user_curr_dir;
 }
 
 void minifile_test_make_fs() {
