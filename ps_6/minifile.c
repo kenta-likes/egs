@@ -192,9 +192,20 @@ int minifile_get_block_from_dir(char* dir_path){
   */
   curr_block_num = s_block->u.hdr.root;
   while (curr_dir_name[0] != '\0'){
-    disk_read_block(my_disk, curr_block_num, curr_block);
+    disk_read_block(my_disk, curr_block_num, curr_block); //read in the block from the current block number
     semaphore_P(block_array[curr_block_num]->block_sem);
-    i_block = (inode_block*)curr_block;
+    i_block = (inode_block*)curr_block; //next directory to explore
+    for (i = 0; i < i_block->u.dir_hdr.){ //iterate over entries...
+      // read in data block
+      // if name matches
+        // if directory
+          // read in inode, break loop
+        // if not directory, return error: file exists
+      // else continue with for loop
+    //}
+    // if i >= total number of entries
+      // could not find; return error
+    // else continue 
   }
   
   return -1;
