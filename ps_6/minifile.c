@@ -54,6 +54,9 @@ typedef struct {
   } u;
 } data_block;
 
+typedef struct {
+  int dummy;
+} dir_entry;
 
 struct minifile {
   /* add members here */
