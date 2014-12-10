@@ -7,12 +7,22 @@
 #define DATA_BLOCK_SIZE (DISK_BLOCK_SIZE-sizeof(int)-1)
 #define BLOCK_COUNT disk_size
 #define MAX_PATH_SIZE 256 //account for null character at end
+#define DIR_MAX_ENTRIES_PER_BLOCK (DATA_BLOCK_SIZE/sizeof(dir_entry)) 
+#define INODE_START 2
+#define DATA_START (BLOCK_COUNT/10)
+
 
 /* TYPE DEFS */
 
 /*
  * All the structs for our block types
  * */
+typedef struct {
+  char name[MAX_PATH_SIZE + 1];
+  int block_num;
+  char type;
+} dir_entry;
+
 typedef struct {
   union super_union {
     struct super_hdr {
@@ -45,19 +55,21 @@ typedef struct {
 
 typedef struct {
   union data_union {
-    struct data_hdr {
+    struct file_hdr {
       char status;
       int next;
       char data[DATA_BLOCK_SIZE];
-    } hdr;
+    } file_hdr;
+
+    struct dir_hdr {
+      char status;
+      int next;
+      dir_entry data[DIR_MAX_ENTRIES_PER_BLOCK];
+    } dir_hdr;
   
     char padding[DISK_BLOCK_SIZE];
   } u;
 } data_block;
-
-typedef struct {
-  int dummy;
-} dir_entry;
 
 struct minifile {
   /* add members here */
@@ -72,15 +84,15 @@ typedef struct block_ctrl{
 typedef block_ctrl* block_ctrl_t;
 
 enum { FREE = 1, IN_USE };
+enum { DIR_t = 1, FILE_t };
 
 /* GLOBAL VARS */
 int disk_size;
 const char* disk_name;
-int INODE_START;
-int DATA_START;
 block_ctrl_t* block_array = NULL;
 semaphore_t disk_op_lock = NULL;
 disk_t* my_disk = NULL;
+semaphore_t* inode_table;
 
 /* FUNC DEFS */
 
@@ -109,12 +121,6 @@ int minifile_block_ctrl_destroy(block_ctrl_t b) {
   semaphore_destroy(b->block_sem);
   free(b);
   return 0;
-}
-
-void minifile_ensure_exist_at(int idx) {
-  if (!block_array[idx]) {
-    block_array[idx] = minifile_block_ctrl_create();
-  }
 }
 
 /*
@@ -198,6 +204,8 @@ int minifile_get_block_from_dir(char* dir_path){
     disk_read_block(my_disk, curr_block_num, curr_block);
     semaphore_P(block_array[curr_block_num]->block_sem);
     i_block = (inode_block*)curr_block;
+    i_block--;
+    i_block++;
   }
   
   return -1;
@@ -273,7 +281,6 @@ void minifile_test_make_fs() {
   semaphore_P(disk_op_lock); 
   printf("enter minifile_test_make_fs\n");
   
-  minifile_ensure_exist_at(0);
   disk_read_block(my_disk, 0, out);
   semaphore_P(block_array[0]->block_sem);
   super = (super_block*)out;
@@ -284,7 +291,6 @@ void minifile_test_make_fs() {
   free_dblock = super->u.hdr.free_dblock_hd;
 
   block_num = super->u.hdr.root; 
-  minifile_ensure_exist_at(block_num);
   disk_read_block(my_disk, block_num, out);
   semaphore_P(block_array[block_num]->block_sem);
 
@@ -295,7 +301,6 @@ void minifile_test_make_fs() {
   block_num = free_iblock;
   while (block_num != 0) {
     printf("free inode at %d\n", block_num);
-    minifile_ensure_exist_at(block_num);
     disk_read_block(my_disk, block_num, out);
     semaphore_P(block_array[block_num]->block_sem);
     assert(inode->u.hdr.status == FREE);
@@ -306,11 +311,10 @@ void minifile_test_make_fs() {
   block_num = free_dblock;
   while (block_num != 0) {
     printf("free data block at %d\n", block_num);
-    minifile_ensure_exist_at(block_num);
     disk_read_block(my_disk, block_num, out);
     semaphore_P(block_array[block_num]->block_sem);
-    assert(data->u.hdr.status == FREE);
-    block_num = data->u.hdr.next; 
+    assert(data->u.file_hdr.status == FREE);
+    block_num = data->u.file_hdr.next; 
   }
   
   free(out);
@@ -322,34 +326,28 @@ void minifile_make_fs(void) {
   inode_block* inode;
   data_block* data;
   int i;
-  char* out;
   char* magic = "4411";
   
-  out = calloc(DISK_BLOCK_SIZE, sizeof(char));
   super = (super_block*)calloc(1, sizeof(super_block));
   inode = (inode_block*)calloc(1, sizeof(inode_block));
   data = (data_block*)calloc(1, sizeof(inode_block));
  
   semaphore_P(disk_op_lock); 
   printf("enter minifile_make_fs\n");
-  INODE_START = 1;
-  DATA_START = disk_size / 10;
   memcpy(super->u.hdr.magic_num, magic, 4);
   super->u.hdr.block_count = BLOCK_COUNT;
-  super->u.hdr.free_iblock_hd = INODE_START + 1;
+  super->u.hdr.free_iblock_hd = INODE_START;
   super->u.hdr.free_iblock_tl = DATA_START - 1;
   super->u.hdr.free_dblock_hd = DATA_START; 
   super->u.hdr.free_dblock_tl = BLOCK_COUNT - 1; 
-  super->u.hdr.root = INODE_START;
+  super->u.hdr.root = 1;
   
-  minifile_ensure_exist_at(0);
   disk_write_block(my_disk, 0, (char*)super);
   semaphore_P(block_array[0]->block_sem);
  
   // root 
   inode->u.hdr.status = IN_USE;
   inode->u.hdr.byte_count = 0; 
-  minifile_ensure_exist_at(1);
   disk_write_block(my_disk, 1, (char*)inode);
   semaphore_P(block_array[1]->block_sem);
 
@@ -357,35 +355,34 @@ void minifile_make_fs(void) {
   inode->u.hdr.byte_count = 0; 
 
   // make linked list of free inodes
-  for (i = INODE_START + 1; i < DATA_START - 1; i++) {
+  for (i = INODE_START; i < DATA_START - 1; i++) {
     inode->u.hdr.next = i+1;
-    minifile_ensure_exist_at(i);
     disk_write_block(my_disk, i, (char*)inode);
     semaphore_P(block_array[i]->block_sem);
   }
 
   // the last one is null terminated
   inode->u.hdr.next = 0; 
-  minifile_ensure_exist_at(DATA_START - 1);
   disk_write_block(my_disk, DATA_START - 1, (char*)inode);
   semaphore_P(block_array[DATA_START - 1]->block_sem);
 
-  data->u.hdr.status = FREE;
+  data->u.file_hdr.status = FREE;
 
   // make linked list of free data blocks
   for (i = DATA_START; i < BLOCK_COUNT - 1; i++) {
-    data->u.hdr.next = i+1;
-    minifile_ensure_exist_at(i);
+    data->u.file_hdr.next = i+1;
     disk_write_block(my_disk, i, (char*)data);
     semaphore_P(block_array[i]->block_sem);
   }
  
   // the last one is null terminated
-  data->u.hdr.next = 0; 
-  minifile_ensure_exist_at(BLOCK_COUNT - 1);
+  data->u.file_hdr.next = 0; 
   disk_write_block(my_disk, BLOCK_COUNT - 1, (char*)data);
   semaphore_P(block_array[BLOCK_COUNT - 1]->block_sem);
 
+  free(super);
+  free(inode);
+  free(data);
   printf("File System created.\n");
   semaphore_V(disk_op_lock); 
 }
@@ -400,6 +397,8 @@ void minifile_make_fs(void) {
  * Initializes the disk operation lock
  * */
 int minifile_initialize(){
+  int i;
+
   my_disk = (disk_t*)calloc(1, sizeof(disk_t));
   disk_name = "MINIFILESYSTEM";
   disk_initialize(my_disk);
@@ -408,6 +407,15 @@ int minifile_initialize(){
  
   //initialize the array
   block_array = (block_ctrl_t*)calloc(disk_size, sizeof(block_ctrl_t));
+  for (i = 0; i < disk_size; i++) {
+    block_array[i] = minifile_block_ctrl_create();
+  }
+
+  inode_table = (semaphore_t*)calloc(DATA_START, sizeof(semaphore_t));
+  for (i = 0; i < DATA_START; i++) {
+    inode_table[i] = semaphore_create();
+    semaphore_initialize(inode_table[i], 1);
+  }
 
   //install a handler
   install_disk_handler(minifile_disk_handler);
