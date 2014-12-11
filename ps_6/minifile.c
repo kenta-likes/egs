@@ -309,6 +309,10 @@ int minifile_get_block_from_path(char* path){
       memcpy(curr_dir_name, curr_runner, name_len+1); //copy everything including null char
       is_dir = 0;
     }
+    else if (strchr(curr_runner, '/') == 0){ //duplicate /'s in the path name
+      curr_runner++;
+      continue;
+    }
     else {
       name_len = (int)(strchr(curr_runner, '/') - curr_runner);
       memcpy(curr_dir_name, curr_runner, name_len);
@@ -479,19 +483,34 @@ int minifile_unlink(char *filename){
 }
 
 int minifile_mkdir(char *dirname){
-  //int name_len;
-  
-  semaphore_P(disk_op_lock);
+  int name_len;
+  char* parent_dir;
   printf("enter minifile_mkdir\n");
-  semaphore_V(disk_op_lock);
-
-  if (!dirname || dirname[0] == '\0'){
+  
+  if (!dirname || dirname[0] == '\0'){ //NULL string or empty string
     return -1;
   }
-  
+  if (dirname[0] = '/'){ //check path length for absolute
+    if (strlen(dirname) > MAX_PATH_SIZE){
+      return -1;
+    }
+  }
+  else { //check path length for relative
+    if (strlen(dirname) + 1 + strlen(minithread_get_curr_dir()) ){
+      return -1;
+    }
+  }
+  parent_dir = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char));
   //clip off trailing /'s
-  //name_len = strlen(dirname);
-  //if dirname[name_len-1] == 
+  name_len = strlen(dirname);
+  if (dirname[name_len-1] == '/'){
+    memcpy(parent_dir, dirname, strlen(dirname) -1 );
+  }
+
+  semaphore_P(disk_op_lock);
+
+  
+  semaphore_V(disk_op_lock);
   return -1;
 }
 
