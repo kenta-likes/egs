@@ -735,8 +735,11 @@ int minifile_mkdir(char *dirname){
   char* new_dir_name;
   inode_block* parent_block;
   int i;
-  int block_num;
+  int parent_block_num;
+  int child_block_num;
   minifile* new_dir;
+  minifile* child_file_ptr;
+  data_block* new_block;
 
   printf("enter minifile_mkdir\n");
   
@@ -764,6 +767,8 @@ int minifile_mkdir(char *dirname){
     i--;
   }
   if (i < 0){ //if name was only /'s
+    free(parent_dir);
+    free(new_dir_name);
     return -1;
   }
 
@@ -792,30 +797,73 @@ int minifile_mkdir(char *dirname){
   new_dir = (minifile*)calloc(1, sizeof(minifile));
 
   semaphore_P(disk_op_lock);
-  printf("got past the PPPPP\n");
-  block_num = minifile_get_block_from_path(parent_dir);
-  if (block_num == -1){
+  if (minifile_get_block_from_path(dirname) != -1){
+    semaphore_V(disk_op_lock);
+    printf("ERROR: path already exists\n");
+    free(parent_dir);
+    free(new_dir_name);
+    free(parent_block);
+    free(new_dir);
+    return -1;
+  }
+  parent_block_num = minifile_get_block_from_path(parent_dir);
+  if (parent_block_num == -1){
+    semaphore_V(disk_op_lock);
     printf("something went horribly wrong and we can't find the block\n");
+    free(parent_dir);
+    free(new_dir_name);
+    free(parent_block);
+    free(new_dir);
     return -1;
   }
 
-  disk_read_block(my_disk, block_num, (char*)parent_block );
-  semaphore_P(block_array[block_num]->block_sem);
+  disk_read_block(my_disk, parent_block_num, (char*)parent_block );
+  semaphore_P(block_array[parent_block_num]->block_sem);
   printf("got the parent block! Now I just need to get a free inode and add it as an entry\n");
   
   //grab a free inode!
-  new_dir->inode_num = block_num;
-  if (minifile_new_inode(new_dir, new_dir_name, DIR_t) == -1) {
+  new_dir->inode_num = parent_block_num;
+  child_block_num = minifile_new_inode(new_dir, new_dir_name, DIR_t);
+  if (child_block_num == -1) {
+    semaphore_V(disk_op_lock);
     printf("failed on getting new inode! aaaahhhhhh\n");
+    free(parent_dir);
+    free(new_dir_name);
+    free(parent_block);
+    free(new_dir);
     return -1;
   }
   //write in the . and .. directories!!
-  //if ( minifile_new_dblock(minifile_t handle, data_block* data) == -1){
-   // printf("failed on getting new d_block! aaaahhhhhh\n");
-   // return -1;
-  //}
+  new_block = (data_block*)calloc(1,sizeof(data_block));
+  child_file_ptr = (minifile*)calloc(1, sizeof(minifile));
+  child_file_ptr->inode_num = child_block_num;
+
+  new_block->u.dir_hdr.status = IN_USE;
+  strcpy(new_block->u.dir_hdr.data[0].name, ".");
+  new_block->u.dir_hdr.data[0].block_num = child_block_num;
+  new_block->u.dir_hdr.data[0].type = DIR_t;
+  strcpy(new_block->u.dir_hdr.data[1].name, "..");
+  new_block->u.dir_hdr.data[1].block_num = parent_block_num;
+  new_block->u.dir_hdr.data[1].type = DIR_t;
+  if ( minifile_new_dblock(child_file_ptr, new_block, 2) == -1){
+    semaphore_V(disk_op_lock);
+    printf("failed on getting new d_block! aaaahhhhhh\n");
+    free(parent_dir);
+    free(new_dir_name);
+    free(parent_block);
+    free(new_dir);
+    free(new_block); 
+    free(child_file_ptr); 
+    return -1;
+  }
   
   semaphore_V(disk_op_lock);
+  free(parent_dir);
+  free(new_dir_name);
+  free(parent_block);
+  free(new_dir);
+  free(new_block); 
+  free(child_file_ptr); 
   return -1;
 }
 
