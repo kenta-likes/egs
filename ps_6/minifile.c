@@ -294,6 +294,10 @@ int minifile_get_block_from_path(char* path){
       memcpy(curr_dir_name, curr_runner, name_len+1); //copy everything including null char
       is_dir = 0;
     }
+    else if (strchr(curr_runner, '/') == 0){ //duplicate /'s in the path name
+      curr_runner++;
+      continue;
+    }
     else {
       name_len = (int)(strchr(curr_runner, '/') - curr_runner);
       memcpy(curr_dir_name, curr_runner, name_len);
@@ -592,19 +596,65 @@ int minifile_unlink(char *filename){
 }
 
 int minifile_mkdir(char *dirname){
-  //int name_len;
-  
-  semaphore_P(disk_op_lock);
+  int name_len;
+  char* parent_dir;
+  char* new_dir_name;
+  int i;
   printf("enter minifile_mkdir\n");
-  semaphore_V(disk_op_lock);
-
-  if (!dirname || dirname[0] == '\0'){
+  
+  if (!dirname || dirname[0] == '\0'){ //NULL string or empty string
     return -1;
   }
-  
+  if (dirname[0] == '/'){ //check path length for absolute path
+    if (strlen(dirname) > MAX_PATH_SIZE)
+      return -1;
+  }
+  else { //check path length for relative path
+    if (strlen(dirname) + 1 + strlen(minithread_get_curr_dir()) > MAX_PATH_SIZE )
+      return -1;
+  }
+
+  parent_dir = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char)); //allocate path holder
+  new_dir_name = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char)); //allocate dir name holder
+  strcpy(parent_dir, dirname);
+
   //clip off trailing /'s
-  //name_len = strlen(dirname);
-  //if dirname[name_len-1] == 
+  name_len = strlen(dirname);
+  i = name_len - 1;
+  while (parent_dir[i] == '/' && i >= 0){
+    parent_dir[i] = '\0'; //nullify
+    i--;
+  }
+  if (i < 0){ //if name was only /'s
+    return -1;
+  }
+
+  //get the name of the new directory
+  while (parent_dir[i] != '/'){
+    if (i == 0){
+      if (parent_dir[i] == '/'){ //root dir
+        strcpy(new_dir_name, parent_dir + 1);
+      }
+      else {
+        strcpy(new_dir_name, parent_dir);
+        parent_dir[0] = '.';
+      }
+      parent_dir[1] = '\0';
+      break;
+    }
+    i--;
+  }
+  if (i != 0){
+    strcpy(new_dir_name, parent_dir + i + 1);
+    parent_dir[i+1] = '\0'; //nullify
+  }
+  printf("New directory: %s\n", new_dir_name);
+  printf("Parent directory: %s\n", parent_dir);
+
+  semaphore_P(disk_op_lock);
+
+  
+  semaphore_V(disk_op_lock);
   return -1;
 }
 
