@@ -1042,6 +1042,7 @@ int minifile_unlink(char *filename){
     return -1;
   }
 
+  semaphore_P(inode_lock_table[handle->inode_num]);
   // read in the inode
   disk_read_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
   semaphore_P(block_array[handle->inode_num]->block_sem);  
@@ -1050,6 +1051,7 @@ int minifile_unlink(char *filename){
   if (handle->i_block.u.hdr.type != FILE_t) {
     printf("unlink called on non-file type\n");
     free(handle);
+    semaphore_V(inode_lock_table[handle->inode_num]);
     semaphore_V(disk_op_lock);
     return -1;
   }
@@ -1067,6 +1069,8 @@ int minifile_unlink(char *filename){
   }
   if (i < 0){ //if name was only /'s
     printf("error: name only contains /'s\n");
+    free(handle);
+    semaphore_V(inode_lock_table[handle->inode_num]);
     semaphore_V(disk_op_lock);
     return -1;
   }
@@ -1105,6 +1109,7 @@ int minifile_unlink(char *filename){
     printf("huh? parent is not a directory\n");
     free(parent);
     free(handle);
+    semaphore_V(inode_lock_table[handle->inode_num]);
     semaphore_V(disk_op_lock);
     return -1;
   }
@@ -1122,6 +1127,7 @@ int minifile_unlink(char *filename){
       printf("rm a dblock failed. abort!\n");
       free(parent);
       free(handle);
+      semaphore_V(inode_lock_table[handle->inode_num]);
       semaphore_V(disk_op_lock);
       return -1;
     }
@@ -1140,18 +1146,29 @@ int minifile_unlink(char *filename){
     tmp = (inode_block*)calloc(1, sizeof(inode_block));
     disk_read_block(my_disk, tl, (char*)tmp);
     semaphore_P(block_array[tl]->block_sem);  
+    // put myself end of free list
     tmp->u.hdr.next = handle->inode_num;
+    // flush change to disk
     disk_write_block(my_disk, tl, (char*)tmp);
     semaphore_P(block_array[tl]->block_sem);  
     free(tmp);
     super->u.hdr.free_iblock_tl = handle->inode_num;
-    // tmp contains old tail of free dblock list 
+    // modify tl ptr, not flushed yet
   }
   else {
     super->u.hdr.free_iblock_tl = handle->inode_num;
     super->u.hdr.free_iblock_hd = handle->inode_num;
+    // modify ptrs, not flushed yet
   }
-  
+ 
+  // nullify and label free 
+  tmp = (inode_block*)calloc(1, sizeof(inode_block));
+  tmp->u.hdr.status = FREE;
+  disk_write_block(my_disk, handle->inode_num, (char*)tmp);
+  semaphore_P(block_array[tl]->block_sem);  
+  free(tmp);
+
+  semaphore_V(inode_lock_table[handle->inode_num]);
   semaphore_V(disk_op_lock);
   printf("exit minifile_unlink on success\n");
   free(handle);
