@@ -375,6 +375,30 @@ int minifile_get_block_from_path(char* path){
   return curr_block_num;
 }
 
+/* Does things in this order:
+ * 1) updates count in directory
+ * 2) adds mapping to directory
+ * 3) writes data to new inode
+ * 4) updates free_iblock pointers in superblock 
+ * return 0 on success, -1 on failure
+ */
+int minifile_new_inode(minifile_t handle, 
+    char* name, char type) {
+  return -1;
+}
+
+/* Does things in this order:
+ * 1) updates count in inode
+ * 2) sets ptr to new block
+ * 3) writes data to new dblock 
+ * 4) updates free_dblock pointers in superblock 
+ * return 0 on success, -1 on failure
+ */
+int minifile_new_dblock(minifile_t handle, 
+    data_block* data) {
+  return -1;
+}
+
 minifile_t minifile_creat(char *filename){
   semaphore_P(disk_op_lock);
   printf("enter minifile_creat\n");
