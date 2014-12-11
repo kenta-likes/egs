@@ -14,7 +14,9 @@
 #define MAX_INDIRECT_BLOCKNUM DATA_BLOCK_SIZE/sizeof(int)
 #define NUM_PTRS NUM_DPTRS+MAX_INDIRECT_BLOCKNUM
 #define MAX_DIR_ENTRIES MAX_DIR_ENTRIES_PER_BLOCK*NUM_PTRS
+#define MAX_FILE_SIZE (DATA_BLOCK_SIZE * (NUM_DPTRS + MAX_INDIRECT_BLOCKNUM))
 /* TYPE DEFS */
+
 
 /*
  * All the structs for our block types
@@ -84,6 +86,18 @@ typedef struct {
     char padding[DISK_BLOCK_SIZE];
   } u;
 } data_block;
+
+typedef struct path_node{
+  char name[MAX_PATH_SIZE];
+  struct path_node* next;
+  struct path_node* prev;
+} path_node;
+
+typedef struct path_list{
+  int len;
+  path_node* hd;
+  path_node* tl;
+} path_list;
 
 
 /*TODO create create/destroy funcs for minifile and set block ptrs to NULL*/
@@ -260,6 +274,57 @@ int minifile_get_next_block(minifile_t file_ptr){
 }
 
 /*
+ * Simplifies the path given
+ * e.g. /hello/world/../.. -> /
+ * Will modify whatever is handed in in-place
+ * assumes length is maxed at MAX_PATH_SIZE
+ * */
+void simplify_path(char* path){
+  /*
+  char* runner;
+  char* runner_end;
+  path_list p_list*;
+  path_node p_node;
+  int len;
+
+  //construct the list structure out of the tokens
+  p_list = (path_list*)calloc(1,sizeof(path_list));
+  p_list->len = 1;
+  //create the root node
+  p_node = (path_node*)calloc(1,sizeof(path_node));
+  strcpy(p_node->name, "/");
+  p_list->hd = p_node;
+
+  runner = path + 1;
+  runner_end = strchr(runner, '/');
+  while (runner_end != NULL){
+    p_node->next = (path_node*)calloc(1,sizeof(path_node));
+    memcpy(p_node->next->name, runner, (int)(runner_end - runner));//store name
+    p_node->next->prev = p_node;
+    p_node = p_node->next;
+    p_list->tl = p_node;
+    runner = runner_end + 1;
+
+    while (*runner == '/'){ //skip excessive /'s
+      runner++;
+    }
+  }
+  if ( *runner == '\0'){
+    //no more nodes necessary, last node had trailing /
+  }
+  else {
+    //make new node, store and complete
+  }
+  
+  //read through the tokens, removing unnecessary nodes
+
+  //construct a path from the simplified list and return
+  
+  */
+  return;
+}
+
+/*
  * Helper function to get block number from a directory/file path
  * Returns: block number, -1 if path DNE
  *
@@ -301,6 +366,7 @@ int minifile_get_block_from_path(char* path){
   else { //otherwise it's an absolute path
     strcpy(abs_dir, path);
   }
+  simplify_path(abs_dir); //simplify the path to avoid excessive reading
   s_block = (super_block*)calloc(1, sizeof(super_block)); //make space for block container
   i_block = (inode_block*)calloc(1, sizeof(inode_block)); //make space for block container
 
@@ -704,6 +770,11 @@ minifile_t minifile_open(char *filename, char *mode){
 }
 
 int minifile_read(minifile_t file, char *data, int maxlen){
+  //read in data to char buffer, going up to maxlen
+  if (maxlen > MAX_FILE_SIZE){
+    printf("file too large to read\n");
+    return -1;
+  }
   semaphore_P(disk_op_lock);
   printf("enter minifile_read\n");
   semaphore_V(disk_op_lock);
@@ -923,6 +994,7 @@ int minifile_cd(char *path){
   if (path[0] == '/'){
     strcpy(curr_dir,path);
     //just set the path to the absolute path passed in
+    simplify_path(curr_dir);
     minithread_set_curr_dir(curr_dir);
   }
   else {
@@ -935,6 +1007,7 @@ int minifile_cd(char *path){
       curr_dir[len] = '/';
       strcpy(curr_dir + len + 1, path); //copy relative path
     }
+    simplify_path(curr_dir);
     minithread_set_curr_dir(curr_dir);
   }
   semaphore_V(disk_op_lock);
