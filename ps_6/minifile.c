@@ -372,11 +372,18 @@ int minifile_get_block_from_path(char* path){
 }
 
 minifile_t minifile_creat(char *filename){
+  semaphore_P(disk_op_lock);
+  printf("enter minifile_creat\n");
+  semaphore_V(disk_op_lock);
   return NULL;
 }
 
 minifile_t minifile_open(char *filename, char *mode){
   minifile_t handle;
+
+  if (filename == NULL || mode == NULL) {
+    return NULL;
+  }
 
   semaphore_P(disk_op_lock);
   printf("enter minifile_open\n");
@@ -414,28 +421,69 @@ minifile_t minifile_open(char *filename, char *mode){
     return NULL;
   }  
 
+  // grab file lock yo
+  semaphore_P(inode_lock_table[handle->inode_num]);
+
+  if (minifile_get_next_block(handle) == -1) {
+    free(handle);
+    semaphore_V(inode_lock_table[handle->inode_num]);
+    semaphore_V(disk_op_lock);
+    return NULL;
+  }
+    
+  if (handle->i_block.u.hdr.type == DIR_t) {
+    free(handle);
+    printf("open called on a directory\n");
+    semaphore_V(inode_lock_table[handle->inode_num]);
+    semaphore_V(disk_op_lock);
+    return NULL;
+  }
+
   semaphore_V(disk_op_lock);
-  return NULL;
+  return handle;
 }
 
 int minifile_read(minifile_t file, char *data, int maxlen){
+  semaphore_P(disk_op_lock);
+  printf("enter minifile_read\n");
+  semaphore_V(disk_op_lock);
   return -1;
 }
 
 int minifile_write(minifile_t file, char *data, int len){
+  semaphore_P(disk_op_lock);
+  printf("enter minifile_write\n");
+  semaphore_V(disk_op_lock);
   return -1;
 }
 
 int minifile_close(minifile_t file){
+  printf("enter minifile_close\n");
+
+  if (!file) {
+    return -1;
+  }
+
+  semaphore_P(disk_op_lock);
+  semaphore_V(inode_lock_table[file->inode_num]);
+  free(file);
+  semaphore_V(disk_op_lock);
   return -1;
 }
 
 int minifile_unlink(char *filename){
+  semaphore_P(disk_op_lock);
+  printf("enter minifile_unlink\n");
+  semaphore_V(disk_op_lock);
   return -1;
 }
 
 int minifile_mkdir(char *dirname){
   //int name_len;
+  
+  semaphore_P(disk_op_lock);
+  printf("enter minifile_mkdir\n");
+  semaphore_V(disk_op_lock);
 
   if (!dirname || dirname[0] == '\0'){
     return -1;
@@ -448,14 +496,23 @@ int minifile_mkdir(char *dirname){
 }
 
 int minifile_rmdir(char *dirname){
+  semaphore_P(disk_op_lock);
+  printf("enter minifile_rmdir\n");
+  semaphore_V(disk_op_lock);
   return -1;
 }
 
 int minifile_stat(char *path){
+  semaphore_P(disk_op_lock);
+  printf("enter minifile_stat\n");
+  semaphore_V(disk_op_lock);
   return -1;
 } 
 
 int minifile_cd(char *path){
+  semaphore_P(disk_op_lock);
+  printf("enter minifile_cd\n");
+  semaphore_V(disk_op_lock);
   return -1;
 }
 
@@ -464,6 +521,10 @@ char **minifile_ls(char *path){
   char** file_list;
   int i,j;
   char* tmp;
+
+  if (!path) {
+    return NULL;
+  }
 
   semaphore_P(disk_op_lock);
   printf("enter minifile_ls\n");
