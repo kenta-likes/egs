@@ -212,16 +212,20 @@ int minifile_get_next_block(minifile_t file_ptr){
   int index;
 
   block_total = 0; //initialize to 0
+  if (file_ptr->block_cursor == 0){ //if this is the first block read, read in the inode
+    disk_read_block(my_disk, file_ptr->inode_num, (char*)(&file_ptr->i_block) );
+    semaphore_P(block_array[file_ptr->inode_num]->block_sem);
+  }
   if (file_ptr->i_block.u.hdr.type == FILE_t){
     block_total = file_ptr->i_block.u.hdr.count / DATA_BLOCK_SIZE;
     //if not divisible, add 1 to get ceiling
-    if (block_total % file_ptr->i_block.u.hdr.count / DATA_BLOCK_SIZE != 0){
+    if (file_ptr->i_block.u.hdr.count % DATA_BLOCK_SIZE != 0){
       block_total++;
     }
   }
   else {
     block_total = file_ptr->i_block.u.hdr.count / MAX_DIR_ENTRIES_PER_BLOCK;
-    if (block_total % file_ptr->i_block.u.hdr.count / MAX_DIR_ENTRIES_PER_BLOCK != 0){
+    if (file_ptr->i_block.u.hdr.count % MAX_DIR_ENTRIES_PER_BLOCK != 0){
       block_total++;
     }
   }
@@ -272,6 +276,7 @@ int minifile_get_block_from_path(char* path){
   int entries_total;
   int is_dir;
 
+  printf("Entering minifile_get_block_from_path()\n"); //TODO: Check output
   curr_dir_name = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char));
   tmp_file = (minifile_t)calloc(1, sizeof(minifile));
   //this is a relative path, so construct absolute path
@@ -280,7 +285,9 @@ int minifile_get_block_from_path(char* path){
     j = strlen(path);
     abs_dir = (char*)calloc(i + j + 2, sizeof(char)); //+2 bc one for null, one for '/' char
     strcpy(abs_dir, minithread_get_curr_dir());
-    abs_dir[i] = '/'; //replace null char with '/' to continue path
+    if (abs_dir[strlen(abs_dir) - 1] != '/'){
+      abs_dir[i] = '/'; //replace null char with '/' to continue path
+    }
     strcpy(abs_dir + i + 1, path); //copy path passed in after '/'
   }
   else { //otherwise it's an absolute path
@@ -289,10 +296,9 @@ int minifile_get_block_from_path(char* path){
   }
   s_block = (super_block*)calloc(1, sizeof(super_block)); //make space for block container
 
-  semaphore_P(disk_op_lock); //grab disk operation lock
 
   curr_runner = abs_dir; //point to beginning
-  printf("Absolute path is %s\n", abs_dir); //TODO: Check output
+  printf("Absolute path is %s\n", abs_dir);
 
  
   //read the super block
@@ -320,8 +326,6 @@ int minifile_get_block_from_path(char* path){
       is_dir = 1;
     }
 
-    disk_read_block(my_disk, curr_block_num, (char*)(&tmp_file->i_block) );
-    semaphore_P(block_array[curr_block_num]->block_sem);
     tmp_file->inode_num = curr_block_num; //init tmp_file before iterator
     tmp_file->block_cursor = 0;
     curr_block_num = -1; //set to -1 to check at end of loop
@@ -347,7 +351,6 @@ int minifile_get_block_from_path(char* path){
             break;
           }
           else {
-            semaphore_V(disk_op_lock);
             free(curr_dir_name);//make sure to free before return
             free(abs_dir);
             free(s_block);
@@ -359,7 +362,6 @@ int minifile_get_block_from_path(char* path){
       }
     }
     if ( curr_block_num == -1 ) { //not found
-      semaphore_V(disk_op_lock);
       free(curr_dir_name);//make sure to free before return
       free(abs_dir);
       free(s_block);
@@ -367,7 +369,6 @@ int minifile_get_block_from_path(char* path){
       return -1; //error case
     }
   }
-  semaphore_V(disk_op_lock);
   free(curr_dir_name);//make sure to free before return
   free(abs_dir);
   free(tmp_file);
@@ -510,7 +511,11 @@ int minifile_mkdir(char *dirname){
   int name_len;
   char* parent_dir;
   char* new_dir_name;
+  inode_block* parent_block;
   int i;
+  int block_num;
+  minifile* new_dir;
+
   printf("enter minifile_mkdir\n");
   
   if (!dirname || dirname[0] == '\0'){ //NULL string or empty string
@@ -561,9 +566,28 @@ int minifile_mkdir(char *dirname){
   }
   printf("New directory: %s\n", new_dir_name);
   printf("Parent directory: %s\n", parent_dir);
+  parent_block = (inode_block*)calloc(1, sizeof(inode_block));
+  new_dir = (minifile*)calloc(1, sizeof(minifile));
 
   semaphore_P(disk_op_lock);
+  printf("got past the PPPPP\n");
+  block_num = minifile_get_block_from_path(parent_dir);
+  if (block_num == -1){
+    printf("something went horribly wrong and we can't find the block\n");
+    return -1;
+  }
 
+  disk_read_block(my_disk, block_num, (char*)parent_block );
+  semaphore_P(block_array[block_num]->block_sem);
+  printf("got the parent block! Now I just need to get a free inode and add it as an entry\n");
+  
+  //grab a free inode!
+  new_dir->inode_num = block_num;
+  if (minifile_new_inode(new_dir, new_dir_name, DIR_t) != 0) {
+    printf("failed on getting new inode! aaaahhhhhh\n");
+    return -1;
+  }
+  //write in the . and .. directories!!
   
   semaphore_V(disk_op_lock);
   return -1;
@@ -605,6 +629,7 @@ char **minifile_ls(char *path){
 
   handle = (minifile_t)calloc(1, sizeof(struct minifile)); 
   handle->inode_num = minifile_get_block_from_path(path);
+  printf("got past get_block\n");
 
   if (handle->inode_num == -1) {
     free(handle);
@@ -614,11 +639,14 @@ char **minifile_ls(char *path){
     return NULL;
   }  
 
+  printf("calling get net block\n");
   if (minifile_get_next_block(handle) == -1) {
+    printf("get next block failed\n");
     free(handle);
     semaphore_V(disk_op_lock);
     return NULL;
   }
+  printf("get next block success\n");
     
   if (handle->i_block.u.hdr.type == FILE_t) {
     printf("ls called on a file type\n");

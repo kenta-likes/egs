@@ -14,6 +14,9 @@
 #define BUFFER_SIZE 128
 
 //move file from NT to our file system
+int use_existing_disk;
+const char* disk_name;
+//
 int importfile(char *fname,char *ntfname) {
 	FILE *f;
 	int len;
@@ -228,6 +231,8 @@ int shell(int *g) {
 }
 
 int main(int argc, char** argv) {
+    use_existing_disk = 1;
+    disk_name = "MINIFILESYSTEM";
     minithread_system_initialize(shell, NULL);
     return -1;
 }
