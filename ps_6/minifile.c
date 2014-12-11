@@ -101,7 +101,20 @@ typedef struct block_ctrl{
 typedef block_ctrl* block_ctrl_t;
 
 enum { FREE = 1, IN_USE };
-enum { DIR_t = 1, FILE_t }; enum { READ = 0, WRITE, READ_WRITE, APPEND, READ_APPEND }; /* GLOBAL VARS */ int disk_size; const char* disk_name; block_ctrl_t* block_array = NULL; semaphore_t disk_op_lock = NULL; disk_t* my_disk = NULL; semaphore_t* inode_lock_table; /* FUNC DEFS */ block_ctrl_t minifile_block_ctrl_create(void) { block_ctrl_t newb; 
+enum { DIR_t = 1, FILE_t }; 
+enum { READ = 0, WRITE, READ_WRITE, APPEND, READ_APPEND }; 
+
+/* GLOBAL VARS */ 
+int disk_size; 
+const char* disk_name; 
+block_ctrl_t* block_array = NULL; 
+semaphore_t disk_op_lock = NULL; 
+disk_t* my_disk = NULL; 
+semaphore_t* inode_lock_table; 
+
+/* FUNC DEFS */ 
+block_ctrl_t minifile_block_ctrl_create(void) { 
+  block_ctrl_t newb; 
   newb = (block_ctrl_t)calloc(1, sizeof(block_ctrl));
   newb->block_sem = semaphore_create();
   
@@ -392,6 +405,9 @@ int minifile_new_inode(minifile_t handle, char* name, char type) {
     printf("invalid params\n");
     return -1;
   }
+  
+  disk_read_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
+  semaphore_P(block_array[handle->inode_num]->block_sem);  
   
   if (handle->i_block.u.hdr.type != DIR_t) {
     printf("param is not a directory\n");
