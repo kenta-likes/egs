@@ -803,6 +803,8 @@ minifile_t minifile_creat(char *filename){
   }
   child_file_ptr = (minifile*)calloc(1, sizeof(minifile));
   child_file_ptr->inode_num = child_block_num;
+  child_file_ptr->byte_cursor = 0;
+  child_file_ptr->block_cursor = 0;
   
   semaphore_V(disk_op_lock);
   free(parent_dir);
@@ -878,15 +880,40 @@ minifile_t minifile_open(char *filename, char *mode){
 }
 
 int minifile_read(minifile_t file, char *data, int maxlen){
-  //read in data to char buffer, going up to maxlen
+  int bytes_read;
+
+  bytes_read = 0;
   if (maxlen > MAX_FILE_SIZE){
     printf("file too large to read\n");
     return -1;
   }
   semaphore_P(disk_op_lock);
   printf("enter minifile_read\n");
+  while (bytes_read < maxlen && minifile_get_next_block(file) != 0){
+    if (maxlen - bytes_read > DATA_BLOCK_SIZE){ //more space in buffer
+      if (file->i_block.u.hdr.count - file->byte_cursor > DATA_BLOCK_SIZE){ //more left to read in file
+        memcpy(data + bytes_read, file->d_block.u.file_hdr.data, DATA_BLOCK_SIZE);
+        bytes_read += DATA_BLOCK_SIZE;
+      }
+      else { //less than block size left to read in file
+        memcpy(data + bytes_read, file->d_block.u.file_hdr.data, file->i_block.u.hdr.count-file->byte_cursor);
+        bytes_read += file->i_block.u.hdr.count-file->byte_cursor;
+      }
+      //keep reading
+    }
+    else { //no more space in buffer, this should be last block
+      if (file->i_block.u.hdr.count - file->byte_cursor > maxlen - bytes_read){ //buffer size smaller
+        memcpy(data + bytes_read, file->d_block.u.file_hdr.data, maxlen - bytes_read);
+        bytes_read += maxlen - bytes_read;
+      }
+      else { // file content left smaller
+        memcpy(data + bytes_read, file->d_block.u.file_hdr.data, file->i_block.u.hdr.count - file->byte_cursor);
+        bytes_read += file->i_block.u.hdr.count - file->byte_cursor;
+      }
+    }
+  }
   semaphore_V(disk_op_lock);
-  return -1;
+  return 0;
 }
 
 int minifile_write(minifile_t file, char *data, int len){
