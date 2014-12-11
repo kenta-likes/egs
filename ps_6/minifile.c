@@ -698,10 +698,119 @@ int minifile_new_inode(minifile_t handle, char* name, char type) {
 }
 
 minifile_t minifile_creat(char *filename){
+  int name_len;
+  char* parent_dir;
+  char* new_dir_name;
+  inode_block* parent_block;
+  int i;
+  int parent_block_num;
+  int child_block_num;
+  minifile* new_dir;
+  minifile* child_file_ptr;
+
+  printf("enter minifile_mkdir, directory at %s\n", filename);
+  
+  if (!filename || filename[0] == '\0'){ //NULL string or empty string
+    return NULL;
+  }
+  if (filename[0] == '/'){ //check path length for absolute path
+    if (strlen(filename) > MAX_PATH_SIZE)
+      return NULL; 
+  }
+  else { //check path length for relative path
+    if (strlen(filename) + 1 + strlen(minithread_get_curr_dir()) > MAX_PATH_SIZE )
+      return NULL;
+  }
+
+  parent_dir = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char)); //allocate path holder
+  new_dir_name = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char)); //allocate dir name holder
+  strcpy(parent_dir, filename);
+
+  //clip off trailing /'s
+  name_len = strlen(filename);
+  i = name_len - 1;
+  while (parent_dir[i] == '/' && i >= 0){
+    parent_dir[i] = '\0'; //nullify
+    i--;
+  }
+  if (i < 0){ //if name was only /'s
+    free(parent_dir);
+    free(new_dir_name);
+    return NULL;
+  }
+
+  //get the name of the new directory
+  while (parent_dir[i] != '/'){
+    if (i == 0){
+      if (parent_dir[i] == '/'){ //root dir
+        strcpy(new_dir_name, parent_dir + 1);
+      }
+      else {
+        strcpy(new_dir_name, parent_dir);
+        parent_dir[0] = '.';
+      }
+      parent_dir[1] = '\0';
+      break;
+    }
+    i--;
+  }
+  if (i != 0){
+    strcpy(new_dir_name, parent_dir + i + 1);
+    parent_dir[i+1] = '\0'; //nullify
+  }
+  printf("New directory: %s\n", new_dir_name);
+  printf("Parent directory: %s\n", parent_dir);
+  parent_block = (inode_block*)calloc(1, sizeof(inode_block));
+  new_dir = (minifile*)calloc(1, sizeof(minifile));
+
   semaphore_P(disk_op_lock);
-  printf("enter minifile_creat\n");
+  
+  printf("calling get block on %s\n", filename);
+  if (minifile_get_block_from_path(filename) != -1){
+    semaphore_V(disk_op_lock);
+    printf("error. file exists\n");
+    free(parent_dir);
+    free(new_dir_name);
+    free(parent_block);
+    free(new_dir);
+    return NULL;
+  }
+  parent_block_num = minifile_get_block_from_path(parent_dir);
+  if (parent_block_num == -1){
+    semaphore_V(disk_op_lock);
+    printf("something went horribly wrong and we can't find the block\n");
+    free(parent_dir);
+    free(new_dir_name);
+    free(parent_block);
+    free(new_dir);
+    return NULL;
+  }
+
+  disk_read_block(my_disk, parent_block_num, (char*)parent_block );
+  semaphore_P(block_array[parent_block_num]->block_sem);
+  printf("got the parent block! Now I just need to get a free inode and add it as an entry\n");
+  
+  //grab a free inode!
+  new_dir->inode_num = parent_block_num;
+  child_block_num = minifile_new_inode(new_dir, new_dir_name, FILE_t);
+  if (child_block_num == -1) {
+    semaphore_V(disk_op_lock);
+    printf("failed on getting new inode! aaaahhhhhh\n");
+    free(parent_dir);
+    free(new_dir_name);
+    free(parent_block);
+    free(new_dir);
+    return NULL;
+  }
+  child_file_ptr = (minifile*)calloc(1, sizeof(minifile));
+  child_file_ptr->inode_num = child_block_num;
+  
   semaphore_V(disk_op_lock);
-  return NULL;
+  free(parent_dir);
+  free(new_dir_name);
+  free(parent_block);
+  free(new_dir);
+  return child_file_ptr;
 }
 
 minifile_t minifile_open(char *filename, char *mode){
@@ -947,7 +1056,7 @@ int minifile_mkdir(char *dirname){
   free(new_dir);
   free(new_block); 
   free(child_file_ptr); 
-  return -1;
+  return 0;
 }
 
 int minifile_rmdir(char *dirname){
