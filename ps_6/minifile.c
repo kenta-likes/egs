@@ -509,27 +509,58 @@ int minifile_unlink(char *filename){
 int minifile_mkdir(char *dirname){
   int name_len;
   char* parent_dir;
+  char* new_dir_name;
+  int i;
   printf("enter minifile_mkdir\n");
   
   if (!dirname || dirname[0] == '\0'){ //NULL string or empty string
     return -1;
   }
-  if (dirname[0] = '/'){ //check path length for absolute
-    if (strlen(dirname) > MAX_PATH_SIZE){
+  if (dirname[0] == '/'){ //check path length for absolute path
+    if (strlen(dirname) > MAX_PATH_SIZE)
       return -1;
-    }
   }
-  else { //check path length for relative
-    if (strlen(dirname) + 1 + strlen(minithread_get_curr_dir()) ){
+  else { //check path length for relative path
+    if (strlen(dirname) + 1 + strlen(minithread_get_curr_dir()) > MAX_PATH_SIZE )
       return -1;
-    }
   }
-  parent_dir = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char));
+
+  parent_dir = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char)); //allocate path holder
+  new_dir_name = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char)); //allocate dir name holder
+  strcpy(parent_dir, dirname);
+
   //clip off trailing /'s
   name_len = strlen(dirname);
-  if (dirname[name_len-1] == '/'){
-    memcpy(parent_dir, dirname, strlen(dirname) -1 );
+  i = name_len - 1;
+  while (parent_dir[i] == '/' && i >= 0){
+    parent_dir[i] = '\0'; //nullify
+    i--;
   }
+  if (i < 0){ //if name was only /'s
+    return -1;
+  }
+
+  //get the name of the new directory
+  while (parent_dir[i] != '/'){
+    if (i == 0){
+      if (parent_dir[i] == '/'){ //root dir
+        strcpy(new_dir_name, parent_dir + 1);
+      }
+      else {
+        strcpy(new_dir_name, parent_dir);
+        parent_dir[0] = '.';
+      }
+      parent_dir[1] = '\0';
+      break;
+    }
+    i--;
+  }
+  if (i != 0){
+    strcpy(new_dir_name, parent_dir + i + 1);
+    parent_dir[i+1] = '\0'; //nullify
+  }
+  printf("New directory: %s\n", new_dir_name);
+  printf("Parent directory: %s\n", parent_dir);
 
   semaphore_P(disk_op_lock);
 
