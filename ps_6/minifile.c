@@ -445,11 +445,12 @@ int minifile_new_inode(minifile_t handle, char* name, char type) {
     block_idx = handle->i_block.u.hdr.count / MAX_DIR_ENTRIES_PER_BLOCK;
     entry_idx = handle->i_block.u.hdr.count % MAX_DIR_ENTRIES_PER_BLOCK - 1;
 
-    printf("fetching data block to add dir entry\n");
-    printf("block %d at entery %d", block_idx, entry_idx);
-    // read the inode
-    disk_read_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
+    disk_write_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
     semaphore_P(block_array[handle->inode_num]->block_sem);  
+
+    printf("fetching data block to add dir entry\n");
+    printf("block %d at entry %d\n", block_idx, entry_idx);
+    // read the inode
     if (block_idx < 11) {
       // the block is a direct ptr
       block_num = handle->i_block.u.hdr.d_ptrs[block_idx];
