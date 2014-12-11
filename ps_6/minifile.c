@@ -6,13 +6,14 @@
 
 #define DATA_BLOCK_SIZE (DISK_BLOCK_SIZE-sizeof(int)-sizeof(char))
 #define BLOCK_COUNT disk_size
+#define NUM_DPTRS 11
 #define MAX_PATH_SIZE 256 //account for null character at end
 #define MAX_DIR_ENTRIES_PER_BLOCK (DATA_BLOCK_SIZE/sizeof(dir_entry)) 
 #define INODE_START 2
 #define DATA_START (BLOCK_COUNT/10+1)
 #define MAX_INDIRECT_BLOCKNUM DATA_BLOCK_SIZE/sizeof(int)
-
-
+#define NUM_PTRS NUM_DPTRS+MAX_INDIRECT_BLOCKNUM
+#define MAX_DIR_ENTRIES MAX_DIR_ENTRIES_PER_BLOCK*NUM_PTRS
 /* TYPE DEFS */
 
 /*
@@ -57,6 +58,11 @@ typedef struct {
 
 typedef struct {
   union data_union {
+    struct data_hdr {
+      char status;
+      int next;
+    } hdr;
+
     struct file_hdr {
       char status;
       int next;
@@ -381,9 +387,108 @@ int minifile_get_block_from_path(char* path){
  * 4) updates free_dblock pointers in superblock 
  * return 0 on success, -1 on failure
  * the handle is updated
+ * return new_dblock block_num on success, -1 on failure
  */
-int minifile_new_dblock(minifile_t handle, data_block* data) {
-  return -1;
+int minifile_new_dblock(minifile_t handle, data_block* data, int add_count) {
+  super_block* super;
+  data_block* tmp;
+  int block_idx, block_num, new_block;
+
+  printf("enter new_dblock\n");
+  if (handle == NULL || data == NULL || add_count < 1) {
+    printf("invalid params\n");
+    return -1;
+  }
+  
+  disk_read_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
+  semaphore_P(block_array[handle->inode_num]->block_sem);  
+  
+  super = (super_block*)calloc(1, sizeof(super_block));
+  disk_read_block(my_disk, 0, (char*)super);
+  semaphore_P(block_array[0]->block_sem);  
+
+  if (!(super->u.hdr.free_dblock_hd)) {
+    // no free dblocks
+    printf("no more free dblocks\n");
+    free(super);
+    return -1;
+  }
+
+  // inc count
+  handle->i_block.u.hdr.count += add_count;
+
+  // find out which dblock to alloc
+  if (handle->i_block.u.hdr.type == DIR_t) {
+    block_idx = handle->i_block.u.hdr.count / MAX_DIR_ENTRIES_PER_BLOCK;
+    if ((handle->i_block.u.hdr.count) % MAX_DIR_ENTRIES_PER_BLOCK) {
+      block_idx++;
+    } 
+  }
+  else { // FILE_t
+    block_idx = handle->i_block.u.hdr.count / DATA_BLOCK_SIZE;
+    if ((handle->i_block.u.hdr.count) % DATA_BLOCK_SIZE) {
+      block_idx++;
+    }
+  }
+
+  if (block_idx >= NUM_PTRS) {
+    printf("file size exceeded limit\n");
+    free(super);
+    return -1;
+  }
+
+  printf("fetching new data block at idx %d\n", block_idx);
+  new_block = super->u.hdr.free_dblock_hd;
+
+  if (block_idx < 11) {
+    // the block is a direct ptr
+    handle->block_cursor = block_idx;
+    handle->i_block.u.hdr.d_ptrs[block_idx] = new_block;
+    
+    disk_write_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
+    semaphore_P(block_array[handle->inode_num]->block_sem);  
+    printf("modify inode to point to new dblock\n");
+  }
+  else {
+    // first flush new count to disk
+    disk_write_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
+    semaphore_P(block_array[handle->inode_num]->block_sem);  
+
+    block_idx -= 11;
+    printf("reading indirect block\n");
+    block_num = handle->i_block.u.hdr.i_ptr;
+    disk_read_block(my_disk, block_num, (char*)&(handle->indirect_block));
+    semaphore_P(block_array[block_num]->block_sem);  
+    handle->indirect_block.u.indirect_hdr.d_ptrs[block_idx] = new_block;
+    disk_write_block(my_disk, block_num, (char*)&(handle->indirect_block));
+    semaphore_P(block_array[block_num]->block_sem);  
+    printf("modify indirect block to point to new dblock\n");
+  }
+
+  tmp = (data_block*)calloc(1, sizeof(data_block));
+
+  disk_read_block(my_disk, new_block, (char*)tmp);
+  semaphore_P(block_array[new_block]->block_sem);  
+
+  disk_write_block(my_disk, new_block, (char*)data);
+  semaphore_P(block_array[new_block]->block_sem);  
+    
+  if (tmp->u.hdr.next == 0) {
+    // empty list
+    super->u.hdr.free_dblock_hd = 0;
+    super->u.hdr.free_dblock_tl = 0;
+  }
+  else {
+    super->u.hdr.free_dblock_hd = tmp->u.hdr.next;
+  } 
+  
+  disk_write_block(my_disk, 0, (char*)super);
+  semaphore_P(block_array[0]->block_sem);  
+  
+  free(super);
+  free(tmp);
+  printf("exit new_dblock on success\n");
+  return new_block;
 }
 
 /* Does things in this order:
@@ -426,8 +531,14 @@ int minifile_new_inode(minifile_t handle, char* name, char type) {
     return -1;
   }
 
+  if ((handle->i_block.u.hdr.count)++ >= MAX_DIR_ENTRIES) {
+    printf("directory full\n");
+    free(super);
+    return -1;
+  }
+
   // find next spot to write to
-  if ((handle->i_block.u.hdr.count++ % MAX_DIR_ENTRIES_PER_BLOCK) == 0) {
+  if ((handle->i_block.u.hdr.count % MAX_DIR_ENTRIES_PER_BLOCK) == 0) {
     // gotta get a new block
     // do what you gotta do....that's yo job!
     printf("curr data block is full\n");
@@ -436,7 +547,9 @@ int minifile_new_inode(minifile_t handle, char* name, char type) {
     strcpy((char*)(data->u.dir_hdr.data), name);
     data->u.dir_hdr.data[0].block_num = super->u.hdr.free_iblock_hd;
     data->u.dir_hdr.data[0].type = type;  
-    minifile_new_dblock(handle, data);
+    disk_write_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
+    semaphore_P(block_array[handle->inode_num]->block_sem);  
+    minifile_new_dblock(handle, data, 1);
     free(data); 
   }
   else {
@@ -456,7 +569,7 @@ int minifile_new_inode(minifile_t handle, char* name, char type) {
       handle->block_cursor = block_idx;
       block_num = handle->i_block.u.hdr.d_ptrs[block_idx];
     }
-    else if ((block_idx+11) < MAX_INDIRECT_BLOCKNUM) {
+    else {
       // the block is a indirect ptr
       handle->block_cursor = block_idx;
       block_idx -= 11;
