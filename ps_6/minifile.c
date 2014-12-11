@@ -688,11 +688,15 @@ int minifile_mkdir(char *dirname){
   
   //grab a free inode!
   new_dir->inode_num = block_num;
-  if (minifile_new_inode(new_dir, new_dir_name, DIR_t) != 0) {
+  if (minifile_new_inode(new_dir, new_dir_name, DIR_t) == -1) {
     printf("failed on getting new inode! aaaahhhhhh\n");
     return -1;
   }
   //write in the . and .. directories!!
+  //if ( minifile_new_dblock(minifile_t handle, data_block* data) == -1){
+   // printf("failed on getting new d_block! aaaahhhhhh\n");
+   // return -1;
+  //}
   
   semaphore_V(disk_op_lock);
   return -1;
