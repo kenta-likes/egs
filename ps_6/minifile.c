@@ -391,7 +391,7 @@ int minifile_get_block_from_path(char* path){
   free(abs_dir);
   free(tmp_file);
   free(s_block);
-  printf("FOUND!!!\n");
+  printf("FOUND!!! block #%i\n", curr_block_num);
   return curr_block_num;
 }
 
@@ -435,15 +435,9 @@ int minifile_new_dblock(minifile_t handle, data_block* data, int add_count) {
   // find out which dblock to alloc
   if (handle->i_block.u.hdr.type == DIR_t) {
     block_idx = handle->i_block.u.hdr.count / MAX_DIR_ENTRIES_PER_BLOCK;
-    if ((handle->i_block.u.hdr.count) % MAX_DIR_ENTRIES_PER_BLOCK) {
-      block_idx++;
-    } 
   }
   else { // FILE_t
     block_idx = handle->i_block.u.hdr.count / DATA_BLOCK_SIZE;
-    if ((handle->i_block.u.hdr.count) % DATA_BLOCK_SIZE) {
-      block_idx++;
-    }
   }
 
   if (block_idx >= NUM_PTRS) {
@@ -897,7 +891,7 @@ int minifile_stat(char *path){
   printf("enter minifile_stat\n");
   semaphore_V(disk_op_lock);
   return -1;
-} 
+}
 
 int minifile_cd(char *path){
   char* curr_dir;
