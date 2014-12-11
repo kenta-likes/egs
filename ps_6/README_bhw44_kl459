@@ -1,6 +1,7 @@
 Steps to rm_DB
 - fdb->tl->next = db
 - Nullify direct ptr
+- update count in inode
 - db: Nullify + label free
 - fbd->tl = fbd->tl->next
 
@@ -8,6 +9,7 @@ Steps to rm_File
 - foreach db: rm_DB(db)
 - fib->tl->next = file
 - file: Nullify + label free
+- update parent dir
 - fib->tl = fib->tl->next
 
 Steps to rm_Dir
