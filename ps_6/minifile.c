@@ -340,7 +340,6 @@ int minifile_get_block_from_path(char* path){
   char* curr_runner; //use for going through path
   int name_len;
   int i;
-  int j;
   int curr_block_num;
   int entries_read;
   int entries_total;
@@ -353,7 +352,6 @@ int minifile_get_block_from_path(char* path){
   //this is a relative path, so construct absolute path
   if (path[0] != '/'){
     i = strlen(minithread_get_curr_dir()); //use i as temp variable
-    j = strlen(path);
     strcpy(abs_dir, minithread_get_curr_dir());
     if (abs_dir[i-1] == '/'){
       strcpy(abs_dir + i, path); //copy path passed in after '/'
