@@ -230,10 +230,9 @@ int minifile_get_next_block(minifile_t file_ptr){
   int index;
 
   block_total = 0; //initialize to 0
-  if (file_ptr->block_cursor == 0){ //if this is the first block read, read in the inode
-    disk_read_block(my_disk, file_ptr->inode_num, (char*)(&file_ptr->i_block) );
-    semaphore_P(block_array[file_ptr->inode_num]->block_sem);
-  }
+  //read in the inode
+  disk_read_block(my_disk, file_ptr->inode_num, (char*)(&file_ptr->i_block) );
+  semaphore_P(block_array[file_ptr->inode_num]->block_sem);
   if (file_ptr->i_block.u.hdr.type == FILE_t){
     block_total = file_ptr->i_block.u.hdr.count / DATA_BLOCK_SIZE;
     //if not divisible, add 1 to get ceiling
@@ -258,19 +257,20 @@ int minifile_get_next_block(minifile_t file_ptr){
     //still direct block
     disk_read_block(my_disk, file_ptr->i_block.u.hdr.d_ptrs[index], (char*)(&file_ptr->d_block) );
     semaphore_P(block_array[file_ptr->i_block.u.hdr.d_ptrs[index]]->block_sem);
+    file_ptr->block_cursor++;
+    return file_ptr->i_block.u.hdr.d_ptrs[index];
   }
   else {
     index -= 11; //get index in indirect block
-    if (index == 0){
-      //first block in indirect block, so read in the indirect block
-      disk_read_block(my_disk, file_ptr->i_block.u.hdr.i_ptr, (char*)(&file_ptr->indirect_block) );
-      semaphore_P(block_array[file_ptr->i_block.u.hdr.i_ptr]->block_sem);
-    }
+    //read in the indirect block
+    disk_read_block(my_disk, file_ptr->i_block.u.hdr.i_ptr, (char*)(&file_ptr->indirect_block) );
+    semaphore_P(block_array[file_ptr->i_block.u.hdr.i_ptr]->block_sem);
     disk_read_block(my_disk, file_ptr->indirect_block.u.indirect_hdr.d_ptrs[index], (char*)(&file_ptr->d_block) );
     semaphore_P(block_array[file_ptr->indirect_block.u.indirect_hdr.d_ptrs[index]]->block_sem);
+    file_ptr->block_cursor++;
+    return file_ptr->indirect_block.u.indirect_hdr.d_ptrs[index];
   }
-  file_ptr->block_cursor++;
-  return 0;
+  return -1;
 }
 
 /*
@@ -410,7 +410,7 @@ int minifile_get_block_from_path(char* path){
     printf("looking for %s\n", curr_dir_name);
     while ( entries_read < entries_total
             && curr_block_num == -1
-            && minifile_get_next_block(tmp_file) == 0 ){
+            && minifile_get_next_block(tmp_file) != -1 ){
       //search through the directory
       for (i = 0; i < MAX_DIR_ENTRIES_PER_BLOCK && entries_read < entries_total; i++){
         //name match
@@ -887,7 +887,7 @@ int minifile_read(minifile_t file, char *data, int maxlen){
   }
   semaphore_P(disk_op_lock);
   printf("enter minifile_read\n");
-  while (bytes_read < maxlen && minifile_get_next_block(file) != 0){
+  while (bytes_read < maxlen && minifile_get_next_block(file) != -1){
     if (maxlen - bytes_read > DATA_BLOCK_SIZE){ //more space in buffer
       if (file->i_block.u.hdr.count - file->byte_cursor > DATA_BLOCK_SIZE){ //more left to read in file
         memcpy(data + bytes_read, file->d_block.u.file_hdr.data, DATA_BLOCK_SIZE);
