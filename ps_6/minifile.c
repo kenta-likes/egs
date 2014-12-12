@@ -279,7 +279,7 @@ int minifile_get_next_block(minifile_t file_ptr){
  * Will modify whatever is handed in in-place
  * assumes length is maxed at MAX_PATH_SIZE
  * */
-void simplify_path(char* path){
+void minifile_simplify_path(char* path){
   /*
   char* runner;
   char* runner_end;
@@ -364,7 +364,7 @@ int minifile_get_block_from_path(char* path){
   else { //otherwise it's an absolute path
     strcpy(abs_dir, path);
   }
-  simplify_path(abs_dir); //simplify the path to avoid excessive reading
+  minifile_simplify_path(abs_dir); //simplify the path to avoid excessive reading
   s_block = (super_block*)calloc(1, sizeof(super_block)); //make space for block container
   i_block = (inode_block*)calloc(1, sizeof(inode_block)); //make space for block container
 
@@ -389,7 +389,7 @@ int minifile_get_block_from_path(char* path){
       memcpy(curr_dir_name, curr_runner, name_len+1); //copy everything including null char
       is_dir = 0;
     }
-    else if (strchr(curr_runner, '/') == 0){ //duplicate /'s in the path name
+    else if (curr_runner[0] == '/'){ //duplicate /'s in the path name
       curr_runner++;
       continue;
     }
@@ -744,18 +744,63 @@ int minifile_new_inode(minifile_t handle, char* name, char type) {
   return new_block;
 }
 
-minifile_t minifile_creat(char *filename){
+/*
+ *  Splits dirname into parent and child components, and
+ *  stores them into a variable the caller uses
+ * */
+int minifile_get_parent_child_paths(char** parent_dir, char** new_dir_name, char* dirname){
   int name_len;
+  int i;
+  *parent_dir = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char)); //allocate path holder
+  *new_dir_name = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char)); //allocate dir name holder
+  strcpy(*parent_dir, dirname);
+
+  //clip off trailing /'s
+  name_len = strlen(dirname);
+  i = name_len - 1;
+  while ((*parent_dir)[i] == '/' && i >= 0){
+    (*parent_dir)[i] = '\0'; //nullify
+    i--;
+  }
+  if (i < 0){ //if name was only /'s
+    free(*parent_dir);
+    free(*new_dir_name);
+    return -1;
+  }
+
+  //get the name of the new directory
+  while ((*parent_dir)[i] != '/'){
+    if (i == 0){
+      strcpy(*new_dir_name, *parent_dir);
+      (*parent_dir)[0] = '.';
+      (*parent_dir)[1] = '\0';
+      break;
+    }
+    i--;
+  }
+  if (i != 0){
+    strcpy(*new_dir_name, (*parent_dir) + i + 1);
+    (*parent_dir)[i+1] = '\0'; //nullify
+  }
+  else if ((*parent_dir)[0] == '/') {
+    strcpy(*new_dir_name, (*parent_dir) + 1);
+    (*parent_dir)[1] = '\0';
+  }
+
+  return 0;
+
+}
+
+minifile_t minifile_creat(char *filename){
   char* parent_dir;
   char* new_dir_name;
   inode_block* parent_block;
-  int i;
   int parent_block_num;
   int child_block_num;
   minifile* new_dir;
   minifile* child_file_ptr;
 
-  printf("enter minifile_mkdir, directory at %s\n", filename);
+  printf("enter minifile_creat, directory at %s\n", filename);
   
   if (!filename || filename[0] == '\0'){ //NULL string or empty string
     return NULL;
@@ -769,42 +814,10 @@ minifile_t minifile_creat(char *filename){
       return NULL;
   }
 
-  parent_dir = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char)); //allocate path holder
-  new_dir_name = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char)); //allocate dir name holder
-  strcpy(parent_dir, filename);
-
-  //clip off trailing /'s
-  name_len = strlen(filename);
-  i = name_len - 1;
-  while (parent_dir[i] == '/' && i >= 0){
-    parent_dir[i] = '\0'; //nullify
-    i--;
-  }
-  if (i < 0){ //if name was only /'s
-    free(parent_dir);
-    free(new_dir_name);
+  if (minifile_get_parent_child_paths(&parent_dir, &new_dir_name, filename) == -1){
     return NULL;
   }
 
-  //get the name of the new directory
-  while (parent_dir[i] != '/'){
-    if (i == 0){
-      if (parent_dir[i] == '/'){ //root dir
-        strcpy(new_dir_name, parent_dir + 1);
-      }
-      else {
-        strcpy(new_dir_name, parent_dir);
-        parent_dir[0] = '.';
-      }
-      parent_dir[1] = '\0';
-      break;
-    }
-    i--;
-  }
-  if (i != 0){
-    strcpy(new_dir_name, parent_dir + i + 1);
-    parent_dir[i+1] = '\0'; //nullify
-  }
   printf("New directory: %s\n", new_dir_name);
   printf("Parent directory: %s\n", parent_dir);
   parent_block = (inode_block*)calloc(1, sizeof(inode_block));
@@ -1253,11 +1266,9 @@ int minifile_unlink(char *filename){
 }
 
 int minifile_mkdir(char *dirname){
-  int name_len;
   char* parent_dir;
   char* new_dir_name;
   inode_block* parent_block;
-  int i;
   int parent_block_num;
   int child_block_num;
   minifile* new_dir;
@@ -1278,42 +1289,10 @@ int minifile_mkdir(char *dirname){
       return -1;
   }
 
-  parent_dir = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char)); //allocate path holder
-  new_dir_name = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char)); //allocate dir name holder
-  strcpy(parent_dir, dirname);
-
-  //clip off trailing /'s
-  name_len = strlen(dirname);
-  i = name_len - 1;
-  while (parent_dir[i] == '/' && i >= 0){
-    parent_dir[i] = '\0'; //nullify
-    i--;
-  }
-  if (i < 0){ //if name was only /'s
-    free(parent_dir);
-    free(new_dir_name);
+  if (minifile_get_parent_child_paths(&parent_dir, &new_dir_name, dirname) == -1){
     return -1;
   }
 
-  //get the name of the new directory
-  while (parent_dir[i] != '/'){
-    if (i == 0){
-      if (parent_dir[i] == '/'){ //root dir
-        strcpy(new_dir_name, parent_dir + 1);
-      }
-      else {
-        strcpy(new_dir_name, parent_dir);
-        parent_dir[0] = '.';
-      }
-      parent_dir[1] = '\0';
-      break;
-    }
-    i--;
-  }
-  if (i != 0){
-    strcpy(new_dir_name, parent_dir + i + 1);
-    parent_dir[i+1] = '\0'; //nullify
-  }
   printf("New directory: %s\n", new_dir_name);
   printf("Parent directory: %s\n", parent_dir);
   parent_block = (inode_block*)calloc(1, sizeof(inode_block));
@@ -1321,7 +1300,6 @@ int minifile_mkdir(char *dirname){
 
   semaphore_P(disk_op_lock);
   
-  printf("calling get block on %s\n", dirname);
   if (minifile_get_block_from_path(dirname) != -1){
     semaphore_V(disk_op_lock);
     printf("error. file exists\n");
@@ -1437,7 +1415,7 @@ int minifile_cd(char *path){
   if (path[0] == '/'){
     strcpy(curr_dir,path);
     //just set the path to the absolute path passed in
-    simplify_path(curr_dir);
+    minifile_simplify_path(curr_dir);
     minithread_set_curr_dir(curr_dir);
   }
   else {
@@ -1450,7 +1428,7 @@ int minifile_cd(char *path){
       curr_dir[len] = '/';
       strcpy(curr_dir + len + 1, path); //copy relative path
     }
-    simplify_path(curr_dir);
+    minifile_simplify_path(curr_dir);
     minithread_set_curr_dir(curr_dir);
   }
   semaphore_V(disk_op_lock);
