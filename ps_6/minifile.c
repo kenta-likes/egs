@@ -8,7 +8,7 @@
 #define BLOCK_COUNT disk_size
 #define NUM_DPTRS 11
 #define MAX_PATH_SIZE 256 //account for null character at end
-#define MAX_DIR_ENTRIES_PER_BLOCK (DATA_BLOCK_SIZE/sizeof(dir_entry)) 
+#define MAX_DIR_ENTRIES_PER_BLOCK 2 //(DATA_BLOCK_SIZE/sizeof(dir_entry)) 
 #define INODE_START 2
 #define DATA_START (BLOCK_COUNT/10+1)
 #define MAX_INDIRECT_BLOCKNUM DATA_BLOCK_SIZE/sizeof(int)
@@ -603,7 +603,7 @@ int minifile_new_inode(minifile_t handle, char* name, char type) {
     return -1;
   }
 
-  if ((handle->i_block.u.hdr.count)++ >= MAX_DIR_ENTRIES) {
+  if (handle->i_block.u.hdr.count >= MAX_DIR_ENTRIES) {
     printf("directory full\n");
     free(super);
     return -1;
@@ -622,14 +622,19 @@ int minifile_new_inode(minifile_t handle, char* name, char type) {
     disk_write_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
     semaphore_P(block_array[handle->inode_num]->block_sem);  
     minifile_new_dblock(handle, data, 1);
+    disk_read_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
+    semaphore_P(block_array[handle->inode_num]->block_sem);  
+    disk_read_block(my_disk, 0, (char*)super);
+    semaphore_P(block_array[0]->block_sem);  
     free(data); 
   }
   else {
     // fetch the inode
     // fetch the last data block and add to it
     block_idx = handle->i_block.u.hdr.count / MAX_DIR_ENTRIES_PER_BLOCK;
-    entry_idx = handle->i_block.u.hdr.count % MAX_DIR_ENTRIES_PER_BLOCK - 1;
+    entry_idx = handle->i_block.u.hdr.count % MAX_DIR_ENTRIES_PER_BLOCK;
 
+    (handle->i_block.u.hdr.count)++;
     disk_write_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
     semaphore_P(block_array[handle->inode_num]->block_sem);  
 
@@ -639,7 +644,7 @@ int minifile_new_inode(minifile_t handle, char* name, char type) {
 
     handle->block_cursor = block_idx;
 
-    if (block_idx < 11) {
+    if (block_idx < NUM_DPTRS) {
       // the block is a direct ptr
       block_num = handle->i_block.u.hdr.d_ptrs[block_idx];
     }
@@ -1454,7 +1459,7 @@ char **minifile_ls(char *path){
  
   printf("dir count is %d\n", handle->i_block.u.hdr.count);
   // we got a directory yo
-  for (i = 0; i < handle->i_block.u.hdr.count; i++) {
+  for (i = 0; i < handle->i_block.u.hdr.count; i+=j) {
     for (j = 0; ((j+i) < handle->i_block.u.hdr.count) &&
         (j < MAX_DIR_ENTRIES_PER_BLOCK); j++) {
       printf("reading the number %d entry\n", j+i);
@@ -1470,8 +1475,7 @@ char **minifile_ls(char *path){
       semaphore_V(disk_op_lock);
       return file_list; 
     }
-    i += j;
-  }; 
+  } 
 
   free(handle);
   semaphore_V(disk_op_lock);
