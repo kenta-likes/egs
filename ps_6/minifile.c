@@ -1016,11 +1016,13 @@ int minifile_rm_dblock(minifile_t handle, int block_idx) {
 }
 
 int minifile_unlink(char *filename){
-  int parent_block_num, i, name_len; 
-  int tl, dblock_num; // dir_entry_num;
+  int parent_block_num, i, j, name_len; 
+  int tl, dblock_num, dir_entry_num;
+  int found_entry;
   char* parent_dir;
   char* del_file;
-  inode_block* parent;
+  char* tmp_str;
+  minifile_t parent;
   inode_block* tmp;
   super_block* super;
   minifile_t handle;
@@ -1042,7 +1044,9 @@ int minifile_unlink(char *filename){
     return -1;
   }
 
+  // grab the file lock
   semaphore_P(inode_lock_table[handle->inode_num]);
+
   // read in the inode
   disk_read_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
   semaphore_P(block_array[handle->inode_num]->block_sem);  
@@ -1100,12 +1104,12 @@ int minifile_unlink(char *filename){
   parent_block_num = minifile_get_block_from_path(parent_dir);
 
   // load the parent
-  parent = (inode_block*)calloc(1, sizeof(inode_block));
-  disk_read_block(my_disk, parent_block_num, (char*)parent);
+  parent = (minifile_t)calloc(1, sizeof(minifile));
+  disk_read_block(my_disk, parent_block_num, (char*)&(parent->i_block));
   semaphore_P(block_array[parent_block_num]->block_sem);  
 
   // sanity check: parent is a dir
-  if (parent->u.hdr.type != FILE_t) {
+  if (parent->i_block.u.hdr.type != DIR_t) {
     printf("huh? parent is not a directory\n");
     free(parent);
     free(handle);
@@ -1164,9 +1168,37 @@ int minifile_unlink(char *filename){
   // nullify and label free 
   tmp = (inode_block*)calloc(1, sizeof(inode_block));
   tmp->u.hdr.status = FREE;
+  // next is already null
   disk_write_block(my_disk, handle->inode_num, (char*)tmp);
   semaphore_P(block_array[tl]->block_sem);  
   free(tmp);
+
+  // update parent dir
+  dir_entry_num = parent->i_block.u.hdr.count;
+
+  found_entry = 0;
+  tmp_str = (char*)calloc(257, sizeof(char));
+  for (i = 0; i < dir_entry; i++) {
+    for (j = 0; ((j+i) < dir_entry_num) 
+          &&(j < MAX_DIR_ENTRIES_PER_BLOCK); j++) {
+      printf("reading the number %d entry\n", j+i);
+      if (found_entry) {
+        // swap this one and next
+          
+      strcpy(tmp, handle->d_block.u.dir_hdr.data[j].name);
+      file_list[j+i] = tmp;
+    }
+    // copied an entire data block yo
+    // get the next one, if exists
+    if (((j+i) < handle->i_block.u.hdr.count) 
+         && minifile_get_next_block(handle) == -1) {
+      free(handle);
+      semaphore_V(disk_op_lock);
+      return file_list; 
+    }
+    i += j;
+  }; 
+  free(tmp_str);
 
   semaphore_V(inode_lock_table[handle->inode_num]);
   semaphore_V(disk_op_lock);
