@@ -8,7 +8,7 @@
 #define BLOCK_COUNT disk_size
 #define NUM_DPTRS 11
 #define MAX_PATH_SIZE 256 //account for null character at end
-#define MAX_DIR_ENTRIES_PER_BLOCK 2 //(DATA_BLOCK_SIZE/sizeof(dir_entry)) 
+#define MAX_DIR_ENTRIES_PER_BLOCK (DATA_BLOCK_SIZE/sizeof(dir_entry)) 
 #define INODE_START 2
 #define DATA_START (BLOCK_COUNT/10+1)
 #define MAX_INDIRECT_BLOCKNUM DATA_BLOCK_SIZE/sizeof(int)
@@ -471,7 +471,8 @@ int minifile_get_block_from_path(char* path){
 int minifile_new_dblock(minifile_t handle, data_block* data, int add_count) {
   super_block* super;
   data_block* tmp;
-  int block_idx, block_num, new_block;
+  data_block* indirect;
+  int block_idx, block_num, new_block, tmp_num;
 
   printf("enter new_dblock\n");
   if (handle == NULL || data == NULL || add_count < 1) {
@@ -513,8 +514,14 @@ int minifile_new_dblock(minifile_t handle, data_block* data, int add_count) {
   printf("fetching new data block at idx %d\n", block_idx);
   new_block = super->u.hdr.free_dblock_hd;
 
+  if (new_block == 0) {
+    printf("out of dblocks\n");
+    free(super);
+    return -1;
+  }
+
   handle->block_cursor = block_idx;
-  if (block_idx < 11) {
+  if (block_idx < NUM_DPTRS) {
     // the block is a direct ptr
     handle->i_block.u.hdr.d_ptrs[block_idx] = new_block;
     
@@ -527,11 +534,49 @@ int minifile_new_dblock(minifile_t handle, data_block* data, int add_count) {
     disk_write_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
     semaphore_P(block_array[handle->inode_num]->block_sem);  
 
+    if (block_idx == NUM_DPTRS) {
+      // need to get indirect block first
+      tmp = (data_block*)calloc(1, sizeof(data_block));
+
+      disk_read_block(my_disk, new_block, (char*)tmp);
+      semaphore_P(block_array[new_block]->block_sem);  
+      
+      tmp_num = tmp->u.hdr.next;
+      handle->i_block.u.hdr.i_ptr = new_block;
+      
+      if (tmp_num == 0) {
+        printf("out of dblocks\n");
+        free(super);
+        free(tmp);
+        return -1;
+      }
+
+      // change the ptr
+      disk_write_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
+      semaphore_P(block_array[handle->inode_num]->block_sem);  
+
+      indirect = (data_block*)calloc(1, sizeof(data_block));
+      indirect->u.hdr.status = IN_USE;
+      
+      disk_write_block(my_disk, new_block, (char*)indirect);
+      semaphore_P(block_array[new_block]->block_sem);  
+
+      free(indirect);
+      free(tmp);
+
+      new_block = tmp_num; 
+      // update superblock ptr
+      super->u.hdr.free_dblock_hd = new_block;
+     
+      disk_write_block(my_disk, 0, (char*)super);
+      semaphore_P(block_array[0]->block_sem);  
+    }
+
     printf("reading indirect block\n");
     block_num = handle->i_block.u.hdr.i_ptr;
     disk_read_block(my_disk, block_num, (char*)&(handle->indirect_block));
     semaphore_P(block_array[block_num]->block_sem);  
-    handle->indirect_block.u.indirect_hdr.d_ptrs[block_idx-11] = new_block;
+    handle->indirect_block.u.indirect_hdr.d_ptrs[block_idx-NUM_DPTRS] = new_block;
     disk_write_block(my_disk, block_num, (char*)&(handle->indirect_block));
     semaphore_P(block_array[block_num]->block_sem);  
     printf("modify indirect block to point to new dblock\n");
