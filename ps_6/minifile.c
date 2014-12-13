@@ -1708,7 +1708,6 @@ void minifile_make_fs(void) {
   data = (data_block*)calloc(1, sizeof(inode_block));
  
   semaphore_P(disk_op_lock); 
-  printf("enter minifile_make_fs\n");
   memcpy(super->u.hdr.magic_num, magic, 4);
   super->u.hdr.block_count = BLOCK_COUNT;
   super->u.hdr.free_iblock_hd = INODE_START;
