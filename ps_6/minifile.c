@@ -665,11 +665,16 @@ int minifile_get_block_from_path(char* path){
   int is_dir;
 
   printf("Entering minifile_get_block_from_path()\n"); //TODO: Check output
+  abs_dir = minifile_absolute_path(path);
+  if (!abs_dir){
+    printf("getting absolute path failed\n");
+    return -1;
+  }
   curr_dir_name = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char));
   //tmp_file = (minifile_t)calloc(1, sizeof(minifile));
-  abs_dir = minifile_absolute_path(path);
   s_block = (super_block*)calloc(1, sizeof(super_block)); //make space for block container
   i_block = (inode_block*)calloc(1, sizeof(inode_block)); //make space for block container
+  tmp_file = NULL;
 
 
   curr_runner = abs_dir; //point to beginning
@@ -681,11 +686,6 @@ int minifile_get_block_from_path(char* path){
   semaphore_P(block_array[0]->block_sem);
 
   curr_block_num = s_block->u.hdr.root; //grab the root block number
-  tmp_file = minifile_create_handle(curr_block_num);
-  printf("Block cursor is %i?????\n", tmp_file->block_cursor);//
-  if (!tmp_file){
-    printf("Oh noes...sobs\n");
-  }
 
   curr_runner += 1; //move curr_runner past '/'
   is_dir = 1;
@@ -710,9 +710,18 @@ int minifile_get_block_from_path(char* path){
     disk_read_block(my_disk, curr_block_num, (char*)i_block); //get the root inode
     semaphore_P(block_array[curr_block_num]->block_sem);
 
+    tmp_file = minifile_create_handle(curr_block_num);
+    if (!tmp_file){
+      printf("Oh noes...sobs\n");
+      free(curr_dir_name);//make sure to free before return
+      free(abs_dir);
+      free(s_block);
+      free(i_block);
+      return -1;
+    }
     //tmp_file->inode_num = curr_block_num; //init tmp_file before iterator
     printf("block cursor here is %i\n", tmp_file->block_cursor);
-    tmp_file->block_cursor = 0;//
+    //tmp_file->block_cursor = 0;//
     entries_total = i_block->u.hdr.count;
     curr_block_num = -1; //set to -1 to check at end of loop
     entries_read = 0; //set to 0 before reading
@@ -762,9 +771,11 @@ int minifile_get_block_from_path(char* path){
   }
   free(curr_dir_name);//make sure to free before return
   free(abs_dir);
-  free(tmp_file);
   free(s_block);
   printf("FOUND!!! block #%i\n", curr_block_num);
+  if (tmp_file){
+    free(tmp_file);
+  }
   return curr_block_num;
 }
 
@@ -1140,7 +1151,7 @@ minifile_t minifile_creat(char *filename){
   parent_block_num = minifile_get_block_from_path(parent_dir);
   if (parent_block_num == -1){
     semaphore_V(disk_op_lock);
-    printf("something went horribly wrong and we can't find the block\n");
+    printf("Directory not found: %s\n", parent_dir);
     free(parent_dir);
     free(new_dir_name);
     free(parent_block);
@@ -1552,7 +1563,7 @@ int minifile_mkdir(char *dirname){
   parent_block_num = minifile_get_block_from_path(parent_dir);
   if (parent_block_num == -1){
     semaphore_V(disk_op_lock);
-    printf("something went horribly wrong and we can't find the block\n");
+    printf("Directory not found\n");
     free(parent_dir);
     free(new_dir_name);
     free(parent_block);
