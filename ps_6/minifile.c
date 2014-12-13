@@ -662,24 +662,8 @@ int minifile_get_block_from_path(char* path){
 
   printf("Entering minifile_get_block_from_path()\n"); //TODO: Check output
   curr_dir_name = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char));
-  abs_dir = (char*)calloc(MAX_PATH_SIZE, sizeof(char));
   tmp_file = (minifile_t)calloc(1, sizeof(minifile));
-  //this is a relative path, so construct absolute path
-  if (path[0] != '/'){
-    i = strlen(minithread_get_curr_dir()); //use i as temp variable
-    strcpy(abs_dir, minithread_get_curr_dir());
-    if (abs_dir[i-1] == '/'){
-      strcpy(abs_dir + i, path); //copy path passed in after '/'
-    }
-    else {
-      abs_dir[i] = '/'; //replace null char with '/' to continue path
-      strcpy(abs_dir + i + 1, path); //copy path passed in after '/'
-    }
-  }
-  else { //otherwise it's an absolute path
-    strcpy(abs_dir, path);
-  }
-  minifile_simplify_path(abs_dir); //simplify the path to avoid excessive reading
+  abs_dir = minifile_absolute_path(path);
   s_block = (super_block*)calloc(1, sizeof(super_block)); //make space for block container
   i_block = (inode_block*)calloc(1, sizeof(inode_block)); //make space for block container
 
@@ -1640,10 +1624,6 @@ int minifile_stat(char *path){
 int minifile_cd(char *path){
   char* curr_dir;
 
-  printf("enter minifile_cd\n");
-  printf("==============================YERRR=====================\n");
-  printf("%s",minifile_simplify_path(path));
-  printf("\n");
   
   if (!path || path[0] == '\0'){ //NULL string or empty string
     return -1;
