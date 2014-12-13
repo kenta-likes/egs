@@ -380,14 +380,19 @@ int minifile_truncate(minifile_t handle) {
 }
 
 /* removes this name from directory and updates dir count
+ * does things in this order:
+ * 1) looks for entry and blankifies it if found
+ * 2) decrement the count in the inode
+ * 3) copy in the last entry into that spot
+ * 4) blankfies the last entry
  * return 0 on success, -1 on failure
  */
 int minifile_rm_dir_entry(minifile_t handle, char* name) {
-  //int total;
-  //int i,j;
+  int total;
+  int i,j;
   int block_idx, entry_num;
   int block_num;
-  char* last_entry;
+  dir_entry last_entry;
 
   printf("enter minifile_rm_dir_entry\n");
 
@@ -414,57 +419,75 @@ int minifile_rm_dir_entry(minifile_t handle, char* name) {
     return -1;
   }
 
-  last_entry = (char*)calloc(257, sizeof(char));
-  strcpy(last_entry, handle->d_block.u.dir_hdr.data[entry_num].name);
-  printf("copied last entry: %s\n", last_entry);
-
-  // erase last entry
-  blankify((char*)&(handle->d_block.u.dir_hdr.data[entry_num]), sizeof(dir_entry));
-  disk_write_block(my_disk, block_num, (char*)&(handle->d_block));
-  semaphore_P(block_array[block_num]->block_sem); 
+  // copy the last entry
+  memcpy((char*)&last_entry, (char*)&(handle->d_block.u.dir_hdr.data[entry_num]), sizeof(dir_entry));
+  printf("copied last entry: %s\n", last_entry.name);
  
-/*
-  for (i = 0; i < handle->i_block.u.hdr.count; i+=j) {
-    for (j = 0; ((j+i) < handle->i_block.u.hdr.count) &&
-        (j < MAX_DIR_ENTRIES_PER_BLOCK); j++) {
-      if (!strcmp(handle->d_block.u.dir_hdr.data[j].name, name)) {
-        // found it!
-      }
-      tmp = (char*)calloc(257, sizeof(char));
-      strcpy(tmp, handle->d_block.u.dir_hdr.data[j].name);
-      file_list[j+i] = tmp;
-    }
+  total = handle->i_block.u.hdr.count;
+
+  // start from first block
+  handle->block_cursor = 0;
+  block_num = minifile_get_next_block(handle);
+  if (block_num == -1) {
+    printf("minifile_get_next_block failed. aborting!\n");
+    return -1;
   }
-  printf("exit minifile_rm_dir_entry on success\n");
-  return 0;
+   
+  for (i = 0; i < total; i+=j) {
+    for (j = 0; ((j+i) < total) && (j < MAX_DIR_ENTRIES_PER_BLOCK); j++) {
+      if (!strcmp(handle->d_block.u.dir_hdr.data[j].name, name)) {
+        printf("found dir entry to remove\n");
 
-  // update parent dir
-  dir_entry_num = parent->i_block.u.hdr.count;
+        // erase the entry 
+        blankify((char*)&(handle->d_block.u.dir_hdr.data[j]), sizeof(dir_entry));
+        disk_write_block(my_disk, block_num, (char*)&(handle->d_block));
+        semaphore_P(block_array[block_num]->block_sem);
 
-  found_entry = 0;
-  tmp_str = (char*)calloc(257, sizeof(char));
-  for (i = 0; i < dir_entry; i++) {
-    for (j = 0; ((j+i) < dir_entry_num) 
-          &&(j < MAX_DIR_ENTRIES_PER_BLOCK); j++) {
-      printf("reading the number %d entry\n", j+i);
-      if (found_entry) {
-        // swap this one and next
-          
-      strcpy(tmp, handle->d_block.u.dir_hdr.data[j].name);
-      file_list[j+i] = tmp;
+        // update count in inode
+        (handle->i_block.u.hdr.count)--;
+        disk_write_block(my_disk, handle->inode_num, (char*)&(handle->d_block));
+        semaphore_P(block_array[handle->inode_num]->block_sem);
+
+        // copy in last entry
+        memcpy((char*)&(handle->d_block.u.dir_hdr.data[j]), (char*)&last_entry, sizeof(dir_entry));
+        disk_write_block(my_disk, block_num, (char*)&(handle->d_block));
+        semaphore_P(block_array[block_num]->block_sem);
+  
+        // erase last entry 
+        handle->block_cursor = block_idx;
+
+        block_num = minifile_get_next_block(handle);
+        if (block_num == -1) {
+          printf("minifile_get_next_block failed. aborting!\n");
+          return -1;
+        }
+
+        blankify((char*)&(handle->d_block.u.dir_hdr.data[entry_num]), sizeof(dir_entry));
+        disk_write_block(my_disk, block_num, (char*)&(handle->d_block));
+        semaphore_P(block_array[block_num]->block_sem); 
+        
+        // if last entry on this dblock, rm the dblock
+        if (entry_num == 0) {
+          printf("rm the last entry on this dblock, free it\n");
+          if (minifile_rm_dblock(handle, block_idx) == -1) {
+            printf("minifile_rm_dblock failed. aborting!\n");
+            return -1;
+          }
+        }
+    
+        printf("exit minifile_rm_dir_entry on success\n");
+        return 0;
+      }
     }
-    // copied an entire data block yo
-    // get the next one, if exists
-    if (((j+i) < handle->i_block.u.hdr.count) 
-         && minifile_get_next_block(handle) == -1) {
-      free(handle);
-      semaphore_V(disk_op_lock);
-      return file_list; 
+
+    block_num = minifile_get_next_block(handle);
+    if (block_num == -1) {
+      printf("minifile_get_next_block failed. aborting!\n");
+      return -1;
     }
-    i += j;
-  }; 
-  free(tmp_str);
-*/
+    
+  
+  }
   printf("exit minifile_rm_dir_entry on success\n");
   return 0;
 }
