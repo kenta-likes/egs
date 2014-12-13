@@ -622,8 +622,8 @@ int minifile_get_next_block(minifile_t file_ptr){
 
   block_total = 0; //initialize to 0
   //read in the inode
-  disk_read_block(my_disk, file_ptr->inode_num, (char*)(&file_ptr->i_block) );
-  semaphore_P(block_array[file_ptr->inode_num]->block_sem);
+  //disk_read_block(my_disk, file_ptr->inode_num, (char*)(&file_ptr->i_block) );
+  //semaphore_P(block_array[file_ptr->inode_num]->block_sem);
   if (file_ptr->i_block.u.hdr.type == FILE_t){
     block_total = file_ptr->i_block.u.hdr.count / DATA_BLOCK_SIZE;
     //if not divisible, add 1 to get ceiling
@@ -639,28 +639,32 @@ int minifile_get_next_block(minifile_t file_ptr){
   }
 
   if (file_ptr->block_cursor >= block_total){
+    printf("First return\n");
     return -1;
   }
 
   index = file_ptr->block_cursor;
 
-  if (index < 11){
+  if (index < NUM_DPTRS){
     //still direct block
     disk_read_block(my_disk, file_ptr->i_block.u.hdr.d_ptrs[index], (char*)(&file_ptr->d_block) );
     semaphore_P(block_array[file_ptr->i_block.u.hdr.d_ptrs[index]]->block_sem);
     file_ptr->block_cursor++;
+    printf("Second return\n");
     return file_ptr->i_block.u.hdr.d_ptrs[index];
   }
   else {
-    index -= 11; //get index in indirect block
+    index -= NUM_DPTRS; //get index in indirect block
     //read in the indirect block
-    disk_read_block(my_disk, file_ptr->i_block.u.hdr.i_ptr, (char*)(&file_ptr->indirect_block) );
-    semaphore_P(block_array[file_ptr->i_block.u.hdr.i_ptr]->block_sem);
+    //disk_read_block(my_disk, file_ptr->i_block.u.hdr.i_ptr, (char*)(&file_ptr->indirect_block) );
+    //semaphore_P(block_array[file_ptr->i_block.u.hdr.i_ptr]->block_sem);
     disk_read_block(my_disk, file_ptr->indirect_block.u.indirect_hdr.d_ptrs[index], (char*)(&file_ptr->d_block) );
     semaphore_P(block_array[file_ptr->indirect_block.u.indirect_hdr.d_ptrs[index]]->block_sem);
     file_ptr->block_cursor++;
+    printf("Third return\n");
     return file_ptr->indirect_block.u.indirect_hdr.d_ptrs[index];
   }
+  printf("Fourth return\n");
   return -1;
 }
 
@@ -826,24 +830,8 @@ int minifile_get_block_from_path(char* path){
 
   printf("Entering minifile_get_block_from_path()\n"); //TODO: Check output
   curr_dir_name = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char));
-  abs_dir = (char*)calloc(MAX_PATH_SIZE, sizeof(char));
-  tmp_file = (minifile_t)calloc(1, sizeof(minifile));
-  //this is a relative path, so construct absolute path
-  if (path[0] != '/'){
-    i = strlen(minithread_get_curr_dir()); //use i as temp variable
-    strcpy(abs_dir, minithread_get_curr_dir());
-    if (abs_dir[i-1] == '/'){
-      strcpy(abs_dir + i, path); //copy path passed in after '/'
-    }
-    else {
-      abs_dir[i] = '/'; //replace null char with '/' to continue path
-      strcpy(abs_dir + i + 1, path); //copy path passed in after '/'
-    }
-  }
-  else { //otherwise it's an absolute path
-    strcpy(abs_dir, path);
-  }
-  minifile_simplify_path(abs_dir); //simplify the path to avoid excessive reading
+  //tmp_file = (minifile_t)calloc(1, sizeof(minifile));
+  abs_dir = minifile_absolute_path(path);
   s_block = (super_block*)calloc(1, sizeof(super_block)); //make space for block container
   i_block = (inode_block*)calloc(1, sizeof(inode_block)); //make space for block container
 
@@ -857,6 +845,11 @@ int minifile_get_block_from_path(char* path){
   semaphore_P(block_array[0]->block_sem);
 
   curr_block_num = s_block->u.hdr.root; //grab the root block number
+  tmp_file = minifile_create_handle(curr_block_num);
+  printf("Block cursor is %i?????\n", tmp_file->block_cursor);//
+  if (!tmp_file){
+    printf("Oh noes...sobs\n");
+  }
 
   curr_runner += 1; //move curr_runner past '/'
   is_dir = 1;
@@ -881,8 +874,8 @@ int minifile_get_block_from_path(char* path){
     disk_read_block(my_disk, curr_block_num, (char*)i_block); //get the root inode
     semaphore_P(block_array[curr_block_num]->block_sem);
 
-    tmp_file->inode_num = curr_block_num; //init tmp_file before iterator
-    tmp_file->block_cursor = 0;
+    //tmp_file->inode_num = curr_block_num; //init tmp_file before iterator
+    tmp_file->block_cursor = 0;//
     entries_total = i_block->u.hdr.count;
     curr_block_num = -1; //set to -1 to check at end of loop
     entries_read = 0; //set to 0 before reading
@@ -1719,10 +1712,6 @@ int minifile_stat(char *path){
 int minifile_cd(char *path){
   char* curr_dir;
 
-  printf("enter minifile_cd\n");
-  printf("==============================YERRR=====================\n");
-  printf("%s",minifile_simplify_path(path));
-  printf("\n");
   
   if (!path || path[0] == '\0'){ //NULL string or empty string
     return -1;
@@ -1765,8 +1754,9 @@ char **minifile_ls(char *path){
   semaphore_P(disk_op_lock);
   printf("enter minifile_ls\n");
 
-  handle = (minifile_t)calloc(1, sizeof(struct minifile)); 
-  handle->inode_num = minifile_get_block_from_path(path);
+  handle = minifile_create_handle(minifile_get_block_from_path(path));
+  //handle = (minifile_t)calloc(1, sizeof(struct minifile)); 
+  //handle->inode_num = minifile_get_block_from_path(path);
 
   if (handle->inode_num == -1) {
     free(handle);
