@@ -1346,10 +1346,15 @@ minifile_t minifile_creat(char *filename){
     free(new_dir);
     return NULL;
   }
-  child_file_ptr = (minifile*)calloc(1, sizeof(minifile));
-  child_file_ptr->inode_num = child_block_num;
-  child_file_ptr->byte_cursor = 0;
-  child_file_ptr->block_cursor = 0;
+  child_file_ptr = minifile_create_handle(child_block_num);
+  if (!child_file_ptr){
+    printf("failed on retrieving child file ptr\n");
+    free(parent_dir);
+    free(new_dir_name);
+    free(parent_block);
+    free(new_dir);
+    return NULL;
+  }
   
   semaphore_V(disk_op_lock);
   free(parent_dir);
@@ -1430,35 +1435,39 @@ minifile_t minifile_open(char *filename, char *mode){
 
 int minifile_read(minifile_t file, char *data, int maxlen){
   int bytes_read;
+  int read_cap;
 
   bytes_read = 0;
   if (maxlen > MAX_FILE_SIZE){
     printf("file too large to read\n");
     return -1;
   }
+  if ( !( file->mode ==  READ
+          || file->mode ==  READ_WRITE
+          ||file->mode ==  READ_APPEND)){
+
+    printf("permission denied\n");
+    return -1;
+  }
+
+  //take the smaller of the maxlen or the remaining bytes in file after cursor
+  read_cap = maxlen<((file->i_block.u.hdr.count)-(file->byte_cursor))?
+              maxlen : (file->i_block.u.hdr.count)-(file->byte_cursor);
   semaphore_P(disk_op_lock);
   printf("enter minifile_read\n");
-  while (bytes_read < maxlen && minifile_get_next_block(file) != -1){
-    if (maxlen - bytes_read > DATA_BLOCK_SIZE){ //more space in buffer
-      if (file->i_block.u.hdr.count - file->byte_cursor > DATA_BLOCK_SIZE){ //more left to read in file
-        memcpy(data + bytes_read, file->d_block.u.file_hdr.data, DATA_BLOCK_SIZE);
-        bytes_read += DATA_BLOCK_SIZE;
-      }
-      else { //less than block size left to read in file
-        memcpy(data + bytes_read, file->d_block.u.file_hdr.data, file->i_block.u.hdr.count-file->byte_cursor);
-        bytes_read += file->i_block.u.hdr.count-file->byte_cursor;
-      }
-      //keep reading
+  while (bytes_read < read_cap){
+    if (minifile_get_next_block(file) == -1){
+      semaphore_V(disk_op_lock);
+      printf("read encountered an error\n");
+      return -1;
     }
-    else { //no more space in buffer, this should be last block
-      if (file->i_block.u.hdr.count - file->byte_cursor > maxlen - bytes_read){ //buffer size smaller
-        memcpy(data + bytes_read, file->d_block.u.file_hdr.data, maxlen - bytes_read);
-        bytes_read += maxlen - bytes_read;
-      }
-      else { // file content left smaller
-        memcpy(data + bytes_read, file->d_block.u.file_hdr.data, file->i_block.u.hdr.count - file->byte_cursor);
-        bytes_read += file->i_block.u.hdr.count - file->byte_cursor;
-      }
+    if (read_cap - bytes_read > DATA_BLOCK_SIZE){ //more blocks ahead
+      memcpy(data + bytes_read, file->d_block.u.file_hdr.data, DATA_BLOCK_SIZE);
+      bytes_read += DATA_BLOCK_SIZE;
+    }
+    else { //this should be last block
+        memcpy(data + bytes_read, file->d_block.u.file_hdr.data, read_cap - bytes_read);
+        bytes_read += read_cap - bytes_read;
     }
   }
   semaphore_V(disk_op_lock);
@@ -1676,6 +1685,14 @@ int minifile_mkdir(char *dirname){
   //write in the . and .. directories!!
   new_block = (data_block*)calloc(1,sizeof(data_block));
   child_file_ptr = minifile_create_handle(child_block_num);
+  if (!child_file_ptr){
+    printf("failed on retrieving child file ptr\n");
+    free(parent_dir);
+    free(new_dir_name);
+    free(parent_block);
+    free(new_dir);
+    return -1;
+  }
 
   new_block->u.dir_hdr.status = IN_USE;
   strcpy(new_block->u.dir_hdr.data[0].name, ".");
