@@ -711,6 +711,7 @@ int minifile_get_block_from_path(char* path){
     semaphore_P(block_array[curr_block_num]->block_sem);
 
     //tmp_file->inode_num = curr_block_num; //init tmp_file before iterator
+    printf("block cursor here is %i\n", tmp_file->block_cursor);
     tmp_file->block_cursor = 0;//
     entries_total = i_block->u.hdr.count;
     curr_block_num = -1; //set to -1 to check at end of loop
