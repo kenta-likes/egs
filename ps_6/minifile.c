@@ -143,6 +143,7 @@ int minifile_free_inode(minifile_t parent, minifile_t handle, char* name);
 int minifile_get_parent_child_paths(char** parent_dir, char** new_dir_name, char* dirname);
 char* minifile_absolute_path(char* path);
 char* minifile_simplify_path(char* path);
+int minifile_get_block_from_path(char* path);
 
 /* writes num 0's starting at buff
  */
@@ -1457,6 +1458,7 @@ minifile_t minifile_open(char *filename, char *mode){
   }
 
   semaphore_V(disk_op_lock);
+  printf("exit minifile_open on success\n\n");
   return handle;
 }
 
@@ -1641,7 +1643,7 @@ int minifile_unlink(char *filename){
   }
 
   // free inode and update parent dir
-  if (minifile_free_inode(parent, handle, filename) == -1) {
+  if (minifile_free_inode(parent, handle, child_name) == -1) {
     printf("minifile_free_inode failed. abort!\n");
     free(parent);
     free(handle);
@@ -1776,10 +1778,97 @@ int minifile_mkdir(char *dirname){
 }
 
 int minifile_rmdir(char *dirname){
-  semaphore_P(disk_op_lock);
+  int inode_num, parent_block_num;
+  minifile_t parent, handle;
+  char* parent_name;
+  char* child_name;
+
   printf("enter minifile_rmdir\n");
+
+  if (!dirname) {
+    printf("invalid params\n");
+    return -1;
+  }
+
+  semaphore_P(disk_op_lock);
+  
+  inode_num = minifile_get_block_from_path(dirname);
+  if (inode_num == -1) {
+    printf("%s not a valid file or directory\n", dirname);
+    semaphore_V(disk_op_lock);
+    return -1;
+  }
+
+  handle = minifile_create_handle(inode_num); 
+  if (!handle) {
+    printf("minifile_create_handle failed. abort!\n");
+    semaphore_V(disk_op_lock);
+    return -1; 
+  }
+  
+  if (handle->i_block.u.hdr.type != DIR_t) {
+    printf("rmdir: failed to remove '%s': Not a directory\n", dirname);
+    free(handle);
+    semaphore_V(disk_op_lock);
+    return -1; 
+  }
+      
+  if (handle->i_block.u.hdr.count) {
+    printf("rmdir: failed to remove '%s': Directory not empty\n", dirname);
+    free(handle);
+    semaphore_V(disk_op_lock);
+    return -1; 
+  }
+
+  if (minifile_get_parent_child_paths(&parent_name, &child_name, dirname) == -1) {
+    printf("minifile_get_parent_child_paths failed. abort!\n");
+    free(handle);
+    semaphore_V(disk_op_lock);
+    return -1;
+  }
+
+  printf("parent directory: %s\n", parent_name);
+  printf("directory to delete: %s\n", child_name);
+
+  parent_block_num = minifile_get_block_from_path(parent_name);
+  if (parent_block_num == -1) {
+    printf("error: %s not a file or directory\n", parent_name);
+    free(handle);
+    semaphore_V(disk_op_lock);
+    return -1;
+  }
+
+  // load the parent
+  parent = minifile_create_handle(parent_block_num);
+  if (!parent) {
+    printf("minifile_create_handle failed. abort!\n");
+    free(handle);
+    semaphore_V(disk_op_lock);
+    return -1; 
+  }
+
+  // sanity check: parent is a dir
+  if (parent->i_block.u.hdr.type != DIR_t) {
+    printf("huh? parent is not a directory\n");
+    free(parent);
+    free(handle);
+    semaphore_V(disk_op_lock);
+    return -1;
+  }
+
+  // free inode and update parent dir
+  if (minifile_free_inode(parent, handle, child_name) == -1) {
+    printf("minifile_free_inode failed. abort!\n");
+    free(parent);
+    free(handle);
+    semaphore_V(disk_op_lock);
+    return -1;
+  }
+
   semaphore_V(disk_op_lock);
-  return -1;
+
+  printf("exit minifile_rmdir on success\n\n");
+  return 0;
 }
 
 int minifile_stat(char *path){
@@ -1838,13 +1927,17 @@ char **minifile_ls(char *path){
   inode_num = minifile_get_block_from_path(path);
 
   if (inode_num == -1) {
-    printf("%s", path);
-    printf(": No such file or directory\n");
+    printf("ls: cannot access %s: No such file or directory\n", path);
     semaphore_V(disk_op_lock);
     return NULL;
   }  
 
   handle = minifile_create_handle(inode_num);
+  if (!handle) {
+    printf("minifile_create_handle failed. abort!\n");
+    semaphore_V(disk_op_lock);
+    return NULL; 
+  }
 
   if (minifile_get_next_block(handle) == -1) {
     printf("get next block failed\n");
