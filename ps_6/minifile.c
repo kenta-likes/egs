@@ -121,7 +121,7 @@ typedef block_ctrl* block_ctrl_t;
 
 enum { FREE = 1, IN_USE };
 enum { DIR_t = 1, FILE_t }; 
-enum { READ = 0, WRITE, READ_WRITE, APPEND, READ_APPEND }; 
+enum { READ = 1, WRITE, READ_WRITE, APPEND, READ_APPEND }; 
 
 /* GLOBAL VARS */ 
 int disk_size; 
@@ -171,6 +171,16 @@ minifile_t minifile_create_handle(int inode_num) {
   disk_read_block(my_disk, inode_num, (char*)&(handle->i_block));
   semaphore_P(block_array[inode_num]->block_sem);  
     
+  if (handle->i_block.u.hdr.type == DIR_t) {
+    printf("creating a DIR handle\n");
+  }
+  else if (handle->i_block.u.hdr.type == FILE_t) {
+    printf("creating a FILE handle\n");
+  }
+  else {
+    printf("creating a UNINITIALIZED handle\n");
+  }
+
   if ((handle->i_block.u.hdr.type == DIR_t && 
       math_ceil(handle->i_block.u.hdr.count, MAX_DIR_ENTRIES_PER_BLOCK) > NUM_DPTRS) || 
       (handle->i_block.u.hdr.type == FILE_t && 
@@ -994,6 +1004,11 @@ minifile_t minifile_creat(char *filename){
   new_dir = minifile_create_handle(parent_block_num);
   if (!new_dir){
     printf("NULL ON MINIFILE_CREATE\n");
+    semaphore_V(disk_op_lock);
+    free(parent_dir);
+    free(new_dir_name);
+    free(parent_block);
+    return NULL;
   }
   child_block_num = minifile_new_inode(new_dir, new_dir_name, FILE_t);
   if (child_block_num == -1) {
@@ -1473,7 +1488,6 @@ int minifile_mkdir(char *dirname){
   printf("New directory: %s\n", new_dir_name);
   printf("Parent directory: %s\n", parent_dir);
   parent_block = (inode_block*)calloc(1, sizeof(inode_block));
-  new_dir = (minifile*)calloc(1, sizeof(minifile));
 
   semaphore_P(disk_op_lock);
   
@@ -1483,7 +1497,6 @@ int minifile_mkdir(char *dirname){
     free(parent_dir);
     free(new_dir_name);
     free(parent_block);
-    free(new_dir);
     return -1;
   }
   parent_block_num = minifile_get_block_from_path(parent_dir);
@@ -1493,7 +1506,6 @@ int minifile_mkdir(char *dirname){
     free(parent_dir);
     free(new_dir_name);
     free(parent_block);
-    free(new_dir);
     return -1;
   }
 
@@ -1502,7 +1514,15 @@ int minifile_mkdir(char *dirname){
   printf("got the parent block! Now I just need to get a free inode and add it as an entry\n");
   
   //grab a free inode!
-  new_dir->inode_num = parent_block_num;
+  new_dir = minifile_create_handle(parent_block_num);
+  if (!new_dir) {
+    printf("create handle failed. abort!\n");
+    semaphore_V(disk_op_lock);
+    free(parent_dir);
+    free(new_dir_name);
+    free(parent_block);
+    return -1;
+  }    
   child_block_num = minifile_new_inode(new_dir, new_dir_name, DIR_t);
   if (child_block_num == -1) {
     semaphore_V(disk_op_lock);
@@ -1515,8 +1535,7 @@ int minifile_mkdir(char *dirname){
   }
   //write in the . and .. directories!!
   new_block = (data_block*)calloc(1,sizeof(data_block));
-  child_file_ptr = (minifile*)calloc(1, sizeof(minifile));
-  child_file_ptr->inode_num = child_block_num;
+  child_file_ptr = minifile_create_handle(child_block_num);
 
   new_block->u.dir_hdr.status = IN_USE;
   strcpy(new_block->u.dir_hdr.data[0].name, ".");
@@ -1568,7 +1587,7 @@ int minifile_cd(char *path){
 
   printf("enter minifile_cd\n");
   printf("==============================YERRR=====================\n");
-  printf(minifile_simplify_path(path));
+  printf("%s",minifile_simplify_path(path));
   printf("\n");
   
   if (!path || path[0] == '\0'){ //NULL string or empty string
@@ -1630,7 +1649,6 @@ char **minifile_ls(char *path){
 
   handle = (minifile_t)calloc(1, sizeof(struct minifile)); 
   handle->inode_num = minifile_get_block_from_path(path);
-  printf("got past get_block\n");
 
   if (handle->inode_num == -1) {
     free(handle);
@@ -1640,14 +1658,12 @@ char **minifile_ls(char *path){
     return NULL;
   }  
 
-  printf("calling get next block\n");
   if (minifile_get_next_block(handle) == -1) {
     printf("get next block failed\n");
     free(handle);
     semaphore_V(disk_op_lock);
     return NULL;
   }
-  printf("get next block success\n");
     
   if (handle->i_block.u.hdr.type == FILE_t) {
     printf("ls called on a file type\n");
@@ -1665,7 +1681,6 @@ char **minifile_ls(char *path){
   for (i = 0; i < handle->i_block.u.hdr.count; i+=j) {
     for (j = 0; ((j+i) < handle->i_block.u.hdr.count) &&
         (j < MAX_DIR_ENTRIES_PER_BLOCK); j++) {
-      printf("reading the number %d entry\n", j+i);
       tmp = (char*)calloc(257, sizeof(char));
       strcpy(tmp, handle->d_block.u.dir_hdr.data[j].name);
       file_list[j+i] = tmp;
