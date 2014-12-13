@@ -418,6 +418,7 @@ char* minifile_simplify_path(char* path){
     runner_end = runner + strlen(runner);
   }
   while (runner_end != runner){
+    //printf("Runner end is %s\n", runner_end);
     if ( (int)(runner_end - runner) == 1
           && (memcmp(runner, ".", (int)(runner_end - runner)) == 0) ){
       if (*runner_end != '\0'){
@@ -427,7 +428,7 @@ char* minifile_simplify_path(char* path){
         runner = runner_end;
       }
     }
-    else if ( (int)(runner_end - runner) >= 2
+    else if ( (int)(runner_end - runner) == 2
           && (memcmp(runner, "..",(int) (runner_end - runner)) == 0) ){
       if (p_list->len > 1){
         p_list->tl = p_list->tl->prev;
@@ -457,21 +458,13 @@ char* minifile_simplify_path(char* path){
         runner = runner_end;
       }
 
-      if (*runner == '\0'){ //ends with /
-        p_node->next = (path_node*)calloc(1,sizeof(path_node));
-        strcpy(p_node->next->name, "/");//store name
-        p_node->next->prev = p_node;
-        p_node = p_node->next;
-        p_list->tl = p_node;
-        (p_list->len)++;
-      }
-      else {
+      if (*runner_end != '\0'){ //still a directory
         p_node->name[strlen(p_node->name) + 1] = '\0';
         p_node->name[strlen(p_node->name)] = '/';
       }
-      while (*runner == '/'){ //skip excessive /'s
-        runner++;
-      }
+    }
+    while (*runner == '/'){ //skip excessive /'s
+      runner++;
     }
 
     runner_end = strchr(runner, '/');
@@ -1609,7 +1602,6 @@ int minifile_stat(char *path){
 
 int minifile_cd(char *path){
   char* curr_dir;
-  int len;
 
   printf("enter minifile_cd\n");
   printf("==============================YERRR=====================\n");
@@ -1634,29 +1626,13 @@ int minifile_cd(char *path){
     printf("Directory not found\n");
     return -1;
   }
-  //update currdir
-  curr_dir = (char*)calloc(MAX_PATH_SIZE, sizeof(char));
 
-  if (path[0] == '/'){
-    strcpy(curr_dir,path);
-    //just set the path to the absolute path passed in
-    minifile_simplify_path(curr_dir);
-    minithread_set_curr_dir(curr_dir);
-  }
-  else {
-    strcpy(curr_dir, minithread_get_curr_dir());
-    len = strlen(curr_dir);
-    if (curr_dir[len-1] == '/'){ //ends with /
-      strcpy(curr_dir + len, path); //copy relative path
-    }
-    else { //doesn't end with /
-      curr_dir[len] = '/';
-      strcpy(curr_dir + len + 1, path); //copy relative path
-    }
-    minifile_simplify_path(curr_dir);
-    minithread_set_curr_dir(curr_dir);
-  }
+  //update currdir
+  curr_dir = minifile_absolute_path(path);
+
+  minithread_set_curr_dir(minifile_simplify_path(curr_dir));
   semaphore_V(disk_op_lock);
+  //free(curr_dir);
   return 0;
 }
 
