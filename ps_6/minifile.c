@@ -838,7 +838,13 @@ char* minifile_simplify_path(char* path){
   if (real_path_len > MAX_PATH_SIZE){
     return NULL;
   }
-  real_path[real_path_len] = '\0';
+
+  if (real_path_len > 1 && real_path[real_path_len-1] == '/'){ //if there is a trailing /
+    real_path[real_path_len-1] = '\0';
+  }
+  else {
+    real_path[real_path_len] = '\0';
+  }
   return real_path;
 }
 
@@ -1928,7 +1934,9 @@ int minifile_stat(char *path){
 }
 
 int minifile_cd(char *path){
+  int dir_block_num;
   char* curr_dir;
+  minifile_t dir_ptr;
   printf("enter minifile_cd\n");
   
   if (!path || path[0] == '\0'){ //NULL string or empty string
@@ -1944,9 +1952,18 @@ int minifile_cd(char *path){
   }
 
   semaphore_P(disk_op_lock);
-  if (minifile_get_block_from_path(path) == -1){
+  dir_block_num = minifile_get_block_from_path(path);
+  if (dir_block_num == -1){
     semaphore_V(disk_op_lock);
     printf("Directory not found\n");
+    return -1;
+  }
+  //check if it is DIR_t
+  dir_ptr = minifile_create_handle(dir_block_num);
+  if (dir_ptr->i_block.u.hdr.type != DIR_t){
+    semaphore_V(disk_op_lock);
+    printf("%s: not a directory\n", path);
+    free(dir_ptr);
     return -1;
   }
 
@@ -1955,6 +1972,7 @@ int minifile_cd(char *path){
 
   minithread_set_curr_dir(minifile_simplify_path(curr_dir));
   semaphore_V(disk_op_lock);
+  free(dir_ptr);
   //free(curr_dir);
   printf("exit minifile_cd on success\n\n");
   return 0;
