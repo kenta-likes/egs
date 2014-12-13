@@ -1382,6 +1382,7 @@ minifile_t minifile_creat(char *filename){
     return NULL;
   }
   child_file_ptr = minifile_create_handle(child_block_num);
+  child_file_ptr->mode = READ_WRITE; //set the default permission
   if (!child_file_ptr){
     printf("failed on retrieving child file ptr\n");
     free(parent_dir);
@@ -1424,6 +1425,7 @@ minifile_t minifile_open(char *filename, char *mode){
     semaphore_V(disk_op_lock);
     return NULL;
   }
+  printf("created handle for the file requested\n");
 
   if (!strcmp(mode, "r")) {  
     handle->mode = READ;
@@ -1449,12 +1451,14 @@ minifile_t minifile_open(char *filename, char *mode){
   // grab file lock
   semaphore_P(inode_lock_table[handle->inode_num]);
 
+  /*
   if (minifile_get_next_block(handle) == -1) {
+    printf("could not get next block\n");
     free(handle);
     semaphore_V(inode_lock_table[handle->inode_num]);
     semaphore_V(disk_op_lock);
     return NULL;
-  }
+  }*/
     
   if (handle->i_block.u.hdr.type == DIR_t) {
     free(handle);
@@ -1474,15 +1478,11 @@ int minifile_read(minifile_t file, char *data, int maxlen){
   int read_cap;
 
   bytes_read = 0;
-  if (maxlen > MAX_FILE_SIZE){
-    printf("file too large to read\n");
-    return -1;
-  }
   if ( !( file->mode ==  READ
           || file->mode ==  READ_WRITE
           ||file->mode ==  READ_APPEND)){
 
-    printf("permission denied\n");
+    printf("read permission denied, current permission is %i\n", file->mode);
     return -1;
   }
 
@@ -1500,10 +1500,12 @@ int minifile_read(minifile_t file, char *data, int maxlen){
     if (read_cap - bytes_read > DATA_BLOCK_SIZE){ //more blocks ahead
       memcpy(data + bytes_read, file->d_block.u.file_hdr.data, DATA_BLOCK_SIZE);
       bytes_read += DATA_BLOCK_SIZE;
+      file->byte_cursor += DATA_BLOCK_SIZE;
     }
     else { //this should be last block
-        memcpy(data + bytes_read, file->d_block.u.file_hdr.data, read_cap - bytes_read);
-        bytes_read += read_cap - bytes_read;
+      memcpy(data + bytes_read, file->d_block.u.file_hdr.data, read_cap - bytes_read);
+      bytes_read += read_cap - bytes_read;
+      file->byte_cursor += read_cap - bytes_read;
     }
   }
   semaphore_V(disk_op_lock);
@@ -1511,10 +1513,36 @@ int minifile_read(minifile_t file, char *data, int maxlen){
 }
 
 int minifile_write(minifile_t file, char *data, int len){
-  semaphore_P(disk_op_lock);
+  int bytes_read;
+  //d_block* new_dblock;
+  
   printf("enter minifile_write\n");
+
+  bytes_read = 0;
+  if (len > MAX_FILE_SIZE){
+    printf("data too large to put into file\n");
+    return -1;
+  }
+  if ( !( file->mode ==  WRITE
+          || file->mode ==  READ_WRITE
+          || file->mode ==  READ_APPEND
+          ||file->mode ==  APPEND)){
+    printf("write permission denied, current permission is %i\n", file->mode);
+    return -1;
+  }
+  /*
+  semaphore_P(disk_op_lock);
+  if (minifile_truncate(minifile_t handle) == -1){
+    semaphore_V(disk_op_lock);
+    printf("truncate failed\n");
+    return -1;
+  }
+  //start fresh!
+
   semaphore_V(disk_op_lock);
-  return -1;
+  */
+
+  return 0;
 }
 
 int minifile_close(minifile_t file){

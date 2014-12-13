@@ -126,8 +126,9 @@ int inputfile(char *fname) {
 		memset(str,'\0',BUFFER_SIZE);
 		gets(str);
 		//if(str[0] == 4) //that's what ctrl-D puts in ((char)4)
-    if(str[0] == 1 || str[0] == 4)   // that's what ctrl-D puts in ((char)4) // BUG FIX updated this to ^A which is equal to 1 
+    if(str[0] == 1 || str[0] == 4){// that's what ctrl-D puts in ((char)4) // BUG FIX updated this to ^A which is equal to 1
 			break;
+    }
 		str[strlen(str)] = '\n';
 		minifile_write(f,str,strlen(str));
 	} while(1);
