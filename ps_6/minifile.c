@@ -1743,6 +1743,7 @@ int minifile_cd(char *path){
 
 char **minifile_ls(char *path){
   minifile_t handle;
+  int inode_num;
   char** file_list;
   int i,j;
   char* tmp;
@@ -1754,17 +1755,16 @@ char **minifile_ls(char *path){
   semaphore_P(disk_op_lock);
   printf("enter minifile_ls\n");
 
-  handle = minifile_create_handle(minifile_get_block_from_path(path));
-  //handle = (minifile_t)calloc(1, sizeof(struct minifile)); 
-  //handle->inode_num = minifile_get_block_from_path(path);
+  inode_num = minifile_get_block_from_path(path);
 
-  if (handle->inode_num == -1) {
-    free(handle);
+  if (inode_num == -1) {
     printf("%s", path);
     printf(": No such file or directory\n");
     semaphore_V(disk_op_lock);
     return NULL;
   }  
+
+  handle = minifile_create_handle(inode_num);
 
   if (minifile_get_next_block(handle) == -1) {
     printf("get next block failed\n");
