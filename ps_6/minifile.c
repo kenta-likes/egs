@@ -351,6 +351,30 @@ int minifile_get_next_block(minifile_t file_ptr){
   return -1;
 }
 
+char* minifile_absolute_path(char* path){
+  char* abs_path;
+  int len;
+
+  abs_path = (char*)calloc(MAX_PATH_SIZE, sizeof(char));
+
+  if (path[0] != '/'){
+    len = strlen(minithread_get_curr_dir()); //use i as temp variable
+    strcpy(abs_path, minithread_get_curr_dir());
+    if (abs_path[len-1] == '/'){
+      strcpy(abs_path + len, path); //copy path passed in after '/'
+    }
+    else {
+      abs_path[len] = '/'; //replace null char with '/' to continue path
+      strcpy(abs_path + len + 1, path); //copy path passed in after '/'
+    }
+  }
+  else { //otherwise it's an absolute path
+    strcpy(abs_path, path);
+  }
+
+  return abs_path;
+}
+
 /*
  * Simplifies the path given
  * e.g. /hello/world/../.. -> /
@@ -458,12 +482,14 @@ char* minifile_simplify_path(char* path){
     else {
       strcpy(real_path + real_path_len, p_node->name );
       real_path_len += strlen(p_node->name);
-      p_node = p_node->next;
     }
-    //free(p_node->prev);
+    if (p_node->next){
+      p_node = p_node->next;
+      free(p_node->prev);
+    }
   }
-  //free(p_node);
-  //free(p_list);
+  free(p_node);
+  free(p_list);
   if (real_path_len > MAX_PATH_SIZE){
     return NULL;
   }
