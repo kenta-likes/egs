@@ -4,16 +4,16 @@
 #include "minithread.h"
 #include "interrupts.h"
 
-#define DATA_BLOCK_SIZE (DISK_BLOCK_SIZE-sizeof(int)-sizeof(char))
+#define DATA_BLOCK_SIZE (DISK_BLOCK_SIZE - sizeof(int) - sizeof(char))
 #define BLOCK_COUNT disk_size
 #define NUM_DPTRS 11
 #define MAX_PATH_SIZE 256 //account for null character at end
-#define MAX_DIR_ENTRIES_PER_BLOCK (DATA_BLOCK_SIZE/sizeof(dir_entry)) 
+#define MAX_DIR_ENTRIES_PER_BLOCK (DATA_BLOCK_SIZE / sizeof(dir_entry)) 
 #define INODE_START 2
-#define DATA_START (BLOCK_COUNT/10+1)
-#define MAX_INDIRECT_BLOCKNUM DATA_BLOCK_SIZE/sizeof(int)
-#define NUM_PTRS NUM_DPTRS+MAX_INDIRECT_BLOCKNUM
-#define MAX_DIR_ENTRIES MAX_DIR_ENTRIES_PER_BLOCK*NUM_PTRS
+#define DATA_START (BLOCK_COUNT/10 + 1)
+#define MAX_INDIRECT_BLOCKNUM (DATA_BLOCK_SIZE / sizeof(int))
+#define NUM_PTRS (NUM_DPTRS + MAX_INDIRECT_BLOCKNUM)
+#define MAX_DIR_ENTRIES (MAX_DIR_ENTRIES_PER_BLOCK * NUM_PTRS)
 #define MAX_FILE_SIZE (DATA_BLOCK_SIZE * (NUM_DPTRS + MAX_INDIRECT_BLOCKNUM))
 /* TYPE DEFS */
 
@@ -100,22 +100,21 @@ typedef struct path_list{
 } path_list;
 
 
-/*TODO create create/destroy funcs for minifile and set block ptrs to NULL*/
 typedef struct minifile {
   int inode_num;
-  int byte_cursor;
+  int byte_cursor; // only used by read and write
+                   // no other functions touch this
   inode_block i_block;
   data_block indirect_block;
   data_block d_block;
-  int block_cursor;
-  char mode;
+  int block_cursor; // block_idx of next dblock to read
+  char mode; // only used by read and write
+             // no other functions touch this
 } minifile;
 
 typedef struct block_ctrl{
   semaphore_t block_sem;
   disk_interrupt_arg_t* block_arg;
-  
-  char* buff;
 } block_ctrl;
 
 typedef block_ctrl* block_ctrl_t;
@@ -133,6 +132,80 @@ disk_t* my_disk = NULL;
 semaphore_t* inode_lock_table; 
 
 /* FUNC DEFS */ 
+
+void blankify(char* buff, int num);
+int math_ceil(int x, int y);
+minifile_t minifile_create_handle(int inode_num);
+int minifile_get_curr_block_num(minifile_t handle);
+
+/* writes num 0's starting at buff
+ */
+void blankify(char* buff, int num) {
+  int i;
+  for (i = 0; i < num; i++) buff[i] = 0;
+}
+
+/* computes a mathematical ceiling function 
+*/
+int math_ceil(int x, int y) {
+  if (x % y) return (x / y) + 1; else return (x / y);
+}
+
+/* creates a minifile struct.
+ * inode block and indirect block (if exists) are loaded in.
+ */
+minifile_t minifile_create_handle(int inode_num) {
+  minifile_t handle;
+  int block_num;
+
+  if (inode_num < 1 || inode_num >= DATA_START) {
+    printf("error: minifile_create_handle called on %d\n", inode_num);
+    return NULL;
+  }
+
+  handle = (minifile_t)calloc(1, sizeof(minifile));
+  if (!handle) return NULL;
+  handle->inode_num = inode_num;
+ 
+  // read in inode block 
+  disk_read_block(my_disk, inode_num, (char*)&(handle->i_block));
+  semaphore_P(block_array[inode_num]->block_sem);  
+    
+  if ((handle->i_block.u.hdr.type == DIR_t && 
+      math_ceil(handle->i_block.u.hdr.count, MAX_DIR_ENTRIES_PER_BLOCK) > NUM_DPTRS) || 
+      (handle->i_block.u.hdr.type == FILE_t && 
+      math_ceil(handle->i_block.u.hdr.count, DATA_BLOCK_SIZE) > NUM_DPTRS)) {
+    // load in indirect block
+    block_num = handle->i_block.u.hdr.i_ptr;
+    disk_read_block(my_disk, block_num, (char*)&(handle->indirect_block));
+    semaphore_P(block_array[block_num]->block_sem);  
+  }
+
+  return handle;
+}
+
+/* returns the block num of the curr data block as pointed to by cursor.
+ * assumes indirect block is loaded in if exists.
+ * return -1 on failure
+ */
+int minifile_get_curr_block_num(minifile_t handle) {
+  int block_idx;
+
+  if (!handle) {
+    printf("error: minifile_get_curr_block_num, null param\n");
+    return -1;
+  }
+
+  block_idx = handle->block_cursor;
+  if (block_idx < NUM_DPTRS) {
+    // curr block is dptr
+    return handle->i_block.u.hdr.d_ptrs[block_idx];
+  }
+  else {
+    return handle->indirect_block.u.indirect_hdr.d_ptrs[block_idx-NUM_DPTRS]; 
+  } 
+}
+
 block_ctrl_t minifile_block_ctrl_create(void) { 
   block_ctrl_t newb; 
   newb = (block_ctrl_t)calloc(1, sizeof(block_ctrl));
@@ -159,7 +232,8 @@ int minifile_block_ctrl_destroy(block_ctrl_t b) {
   return 0;
 }
 
-void minifile_fix_fs(){
+void minifile_fix_fs() {
+  printf("enter minifile_fix_fx\n");
   // TODO
   return;
 
@@ -168,18 +242,22 @@ void minifile_fix_fs(){
 void minifile_disk_error_handler(disk_interrupt_arg_t* block_arg) {
   semaphore_P(disk_op_lock);
 
+  printf("enter minifile_disk_error_handler\n");
   switch (block_arg->reply) {
   case DISK_REPLY_FAILED:
     // gotta try again yo
+    printf("disk reply failed on block %d\n", block_arg->request.blocknum);
     disk_send_request(block_arg->disk, block_arg->request.blocknum, 
         block_arg->request.buffer, block_arg->request.type);
     break;
 
   case DISK_REPLY_ERROR:
     printf("DISK_REPLY_ERROR wuttttt\n");
+    printf("unknown error on block %d\n", block_arg->request.blocknum);
     break;
 
   case DISK_REPLY_CRASHED:
+    printf("disk crashed\n");
     minifile_fix_fs();
     break;
   
@@ -540,17 +618,13 @@ int minifile_get_block_from_path(char* path){
 int minifile_new_dblock(minifile_t handle, data_block* data, int add_count) {
   super_block* super;
   data_block* tmp;
-  data_block* indirect;
-  int block_idx, block_num, new_block, tmp_num;
+  int block_idx, block_num, new_block, next;
 
   printf("enter new_dblock\n");
   if (handle == NULL || data == NULL || add_count < 1) {
     printf("invalid params\n");
     return -1;
   }
-  
-  disk_read_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
-  semaphore_P(block_array[handle->inode_num]->block_sem);  
   
   super = (super_block*)calloc(1, sizeof(super_block));
   disk_read_block(my_disk, 0, (char*)super);
@@ -584,7 +658,7 @@ int minifile_new_dblock(minifile_t handle, data_block* data, int add_count) {
   new_block = super->u.hdr.free_dblock_hd;
 
   if (new_block == 0) {
-    printf("out of dblocks\n");
+    printf("out of dblocks. abort!\n");
     free(super);
     return -1;
   }
@@ -592,11 +666,12 @@ int minifile_new_dblock(minifile_t handle, data_block* data, int add_count) {
   handle->block_cursor = block_idx;
   if (block_idx < NUM_DPTRS) {
     // the block is a direct ptr
+
     handle->i_block.u.hdr.d_ptrs[block_idx] = new_block;
     
+    // flush new count and ptr to inode on disk
     disk_write_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
     semaphore_P(block_array[handle->inode_num]->block_sem);  
-    printf("modify inode to point to new dblock\n");
   }
   else {
     // first flush new count to disk
@@ -604,47 +679,51 @@ int minifile_new_dblock(minifile_t handle, data_block* data, int add_count) {
     semaphore_P(block_array[handle->inode_num]->block_sem);  
 
     if (block_idx == NUM_DPTRS) {
+      printf("getting an indirect block\n");
+
       // need to get indirect block first
       tmp = (data_block*)calloc(1, sizeof(data_block));
 
+      // read new dblock hd
       disk_read_block(my_disk, new_block, (char*)tmp);
       semaphore_P(block_array[new_block]->block_sem);  
       
-      tmp_num = tmp->u.hdr.next;
+      // store the second elt in the free dblock list
+      next = tmp->u.hdr.next;
+
+      // change ptr to free dblock hd
       handle->i_block.u.hdr.i_ptr = new_block;
       
-      if (tmp_num == 0) {
-        printf("out of dblocks\n");
+      if (next == 0) {
+        printf("out of dblocks. abort!\n");
         free(super);
         free(tmp);
         return -1;
       }
 
-      // change the ptr
+      // flush inode to disk 
       disk_write_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
       semaphore_P(block_array[handle->inode_num]->block_sem);  
 
-      indirect = (data_block*)calloc(1, sizeof(data_block));
-      indirect->u.hdr.status = IN_USE;
-      
-      disk_write_block(my_disk, new_block, (char*)indirect);
+      blankify((char*)&(handle->indirect_block), sizeof(data_block));
+      handle->indirect_block.u.hdr.status = IN_USE;
+     
+      // flush changes to free dblock hd 
+      disk_write_block(my_disk, new_block, (char*)&(handle->indirect_block));
       semaphore_P(block_array[new_block]->block_sem);  
 
-      free(indirect);
       free(tmp);
 
-      new_block = tmp_num; 
       // update superblock ptr
-      super->u.hdr.free_dblock_hd = new_block;
+      super->u.hdr.free_dblock_hd = next;
      
       disk_write_block(my_disk, 0, (char*)super);
       semaphore_P(block_array[0]->block_sem);  
+
+      new_block = next;
     }
 
-    printf("reading indirect block\n");
-    block_num = handle->i_block.u.hdr.i_ptr;
-    disk_read_block(my_disk, block_num, (char*)&(handle->indirect_block));
-    semaphore_P(block_array[block_num]->block_sem);  
+    block_num = handle->i_block.u.hdr.i_ptr; 
     handle->indirect_block.u.indirect_hdr.d_ptrs[block_idx-NUM_DPTRS] = new_block;
     disk_write_block(my_disk, block_num, (char*)&(handle->indirect_block));
     semaphore_P(block_array[block_num]->block_sem);  
@@ -653,9 +732,11 @@ int minifile_new_dblock(minifile_t handle, data_block* data, int add_count) {
 
   tmp = (data_block*)calloc(1, sizeof(data_block));
 
+  // read free dlbock hd
   disk_read_block(my_disk, new_block, (char*)tmp);
   semaphore_P(block_array[new_block]->block_sem);  
 
+  // overwrite free dlbock hd
   disk_write_block(my_disk, new_block, (char*)data);
   semaphore_P(block_array[new_block]->block_sem);  
     
@@ -668,6 +749,7 @@ int minifile_new_dblock(minifile_t handle, data_block* data, int add_count) {
     super->u.hdr.free_dblock_hd = tmp->u.hdr.next;
   } 
   
+  // flush changes to list ptrs to disk
   disk_write_block(my_disk, 0, (char*)super);
   semaphore_P(block_array[0]->block_sem);  
   
@@ -686,26 +768,25 @@ int minifile_new_dblock(minifile_t handle, data_block* data, int add_count) {
  */
 int minifile_new_inode(minifile_t handle, char* name, char type) {
   super_block* super;
-  data_block* data;
   inode_block* inode;
   inode_block* tmp;
   int entry_idx, block_idx, block_num, new_block;
   
-  printf("enter new_inode\n");
+  printf("enter minifile_new_inode\n");
   if (handle == NULL || name == NULL || strlen(name) > 256) {
     printf("invalid params\n");
     return -1;
   }
-  
-  disk_read_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
-  semaphore_P(block_array[handle->inode_num]->block_sem);  
-  
+ 
+  // note that i_block as already loaded 
+
   if (handle->i_block.u.hdr.type != DIR_t) {
     printf("param is not a directory\n");
     return -1;
   }
 
   // got a directory yo
+  // read in super block
   super = (super_block*)calloc(1, sizeof(super_block));
   disk_read_block(my_disk, 0, (char*)super);
   semaphore_P(block_array[0]->block_sem);  
@@ -723,76 +804,68 @@ int minifile_new_inode(minifile_t handle, char* name, char type) {
     return -1;
   }
 
-  // find next spot to write to
-  if ((handle->i_block.u.hdr.count % MAX_DIR_ENTRIES_PER_BLOCK) == 0) {
-    // gotta get a new block
-    // do what you gotta do....that's yo job!
-    printf("curr data block is full\n");
-    data = (data_block*)calloc(1, sizeof(data_block));
-    data->u.dir_hdr.status = IN_USE;
-    strcpy((char*)(data->u.dir_hdr.data), name);
-    data->u.dir_hdr.data[0].block_num = super->u.hdr.free_iblock_hd;
-    data->u.dir_hdr.data[0].type = type;  
-    disk_write_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
-    semaphore_P(block_array[handle->inode_num]->block_sem);  
-    minifile_new_dblock(handle, data, 1);
-    disk_read_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
-    semaphore_P(block_array[handle->inode_num]->block_sem);  
-    disk_read_block(my_disk, 0, (char*)super);
-    semaphore_P(block_array[0]->block_sem);  
-    free(data); 
-  }
-  else {
-    // fetch the inode
-    // fetch the last data block and add to it
+  if (handle->i_block.u.hdr.count % MAX_DIR_ENTRIES_PER_BLOCK) {
+    // can write to an existing dir data block
     block_idx = handle->i_block.u.hdr.count / MAX_DIR_ENTRIES_PER_BLOCK;
     entry_idx = handle->i_block.u.hdr.count % MAX_DIR_ENTRIES_PER_BLOCK;
 
+    // flush to count to inode
     (handle->i_block.u.hdr.count)++;
     disk_write_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
     semaphore_P(block_array[handle->inode_num]->block_sem);  
 
-    printf("fetching data block to add dir entry\n");
     printf("block %d at entry %d\n", block_idx, entry_idx);
-    // read the inode
-
     handle->block_cursor = block_idx;
 
-    if (block_idx < NUM_DPTRS) {
-      // the block is a direct ptr
-      block_num = handle->i_block.u.hdr.d_ptrs[block_idx];
+    // read in dblock
+    block_num = minifile_get_next_block(handle);
+    if (block_num == -1) {
+      printf("get next block failed. abort!\n");
+      free(super);
+      return -1;
     }
-    else {
-      // the block is a indirect ptr
-      printf("reading indirect ptr\n");
-      block_num = handle->i_block.u.hdr.i_ptr;
-      disk_read_block(my_disk, block_num, (char*)&(handle->indirect_block));
-      semaphore_P(block_array[block_num]->block_sem);  
-      block_num = handle->indirect_block.u.indirect_hdr.d_ptrs[block_idx-11]; 
-    }
-    printf("reading direct ptr\n");
-    disk_read_block(my_disk, block_num, (char*)&(handle->d_block));
-    semaphore_P(block_array[block_num]->block_sem);  
+      
     strcpy((char*)&(handle->d_block.u.dir_hdr.data[entry_idx]), name);
     handle->d_block.u.dir_hdr.data[entry_idx].block_num 
         = super->u.hdr.free_iblock_hd; 
     handle->d_block.u.dir_hdr.data[entry_idx].type = type;  
-    // done modifying da dir
+
+    // flush data to disk
     disk_write_block(my_disk, block_num, (char*)&(handle->d_block));
     semaphore_P(block_array[block_num]->block_sem);  
   }
-  // writing data to new inode
+  else {
+    printf("curr data block is full\n");
+    // gotta get a new block
+
+    // blankify dblock
+    blankify((char*)&(handle->d_block), sizeof(data_block));
+
+    // write into first entry
+    strcpy((char*)(handle->d_block.u.dir_hdr.data), name);
+    handle->d_block.u.dir_hdr.data[0].block_num = super->u.hdr.free_iblock_hd;
+    handle->d_block.u.dir_hdr.data[0].type = type;  
+
+    minifile_new_dblock(handle, &(handle->d_block), 1);
+    // change new_block to update hdr stuff 
+    disk_read_block(my_disk, 0, (char*)super);
+    semaphore_P(block_array[0]->block_sem);  
+  }
+
   inode = (inode_block*)calloc(1, sizeof(inode_block));
   tmp = (inode_block*)calloc(1, sizeof(inode_block));
+
   inode->u.hdr.status = IN_USE;
   inode->u.hdr.type = type;
   
+  // get free iblock hd so data isn't lost
   new_block = super->u.hdr.free_iblock_hd;
-  disk_read_block(my_disk, super->u.hdr.free_iblock_hd, (char*)tmp);
-  semaphore_P(block_array[super->u.hdr.free_iblock_hd]->block_sem);  
+  disk_read_block(my_disk, new_block, (char*)tmp);
+  semaphore_P(block_array[new_block]->block_sem);  
   
-  disk_write_block(my_disk, super->u.hdr.free_iblock_hd, (char*)inode);
-  semaphore_P(block_array[super->u.hdr.free_iblock_hd]->block_sem);  
+  // flush new inode stuff to iblock hd
+  disk_write_block(my_disk, new_block, (char*)inode);
+  semaphore_P(block_array[new_block]->block_sem);  
    
   if (tmp->u.hdr.next == 0) {
     // empty list
@@ -809,6 +882,7 @@ int minifile_new_inode(minifile_t handle, char* name, char type) {
   free(super);
   free(inode);
   free(tmp);
+
   printf("exit new_inode on success\n");
   return new_block;
 }
@@ -1175,11 +1249,14 @@ int minifile_rm_dblock(minifile_t handle, int block_idx) {
 }
 
 int minifile_unlink(char *filename){
-  int parent_block_num, i, name_len; 
-  int tl, dblock_num; // dir_entry_num;
+  /*
+  int parent_block_num, i, j, name_len; 
+  int tl, dblock_num, dir_entry_num;
+  int found_entry;
   char* parent_dir;
   char* del_file;
-  inode_block* parent;
+  char* tmp_str;
+  minifile_t parent;
   inode_block* tmp;
   super_block* super;
   minifile_t handle;
@@ -1201,7 +1278,9 @@ int minifile_unlink(char *filename){
     return -1;
   }
 
+  // grab the file lock
   semaphore_P(inode_lock_table[handle->inode_num]);
+
   // read in the inode
   disk_read_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
   semaphore_P(block_array[handle->inode_num]->block_sem);  
@@ -1259,12 +1338,12 @@ int minifile_unlink(char *filename){
   parent_block_num = minifile_get_block_from_path(parent_dir);
 
   // load the parent
-  parent = (inode_block*)calloc(1, sizeof(inode_block));
-  disk_read_block(my_disk, parent_block_num, (char*)parent);
+  parent = (minifile_t)calloc(1, sizeof(minifile));
+  disk_read_block(my_disk, parent_block_num, (char*)&(parent->i_block));
   semaphore_P(block_array[parent_block_num]->block_sem);  
 
   // sanity check: parent is a dir
-  if (parent->u.hdr.type != FILE_t) {
+  if (parent->i_block.u.hdr.type != DIR_t) {
     printf("huh? parent is not a directory\n");
     free(parent);
     free(handle);
@@ -1323,14 +1402,43 @@ int minifile_unlink(char *filename){
   // nullify and label free 
   tmp = (inode_block*)calloc(1, sizeof(inode_block));
   tmp->u.hdr.status = FREE;
+  // next is already null
   disk_write_block(my_disk, handle->inode_num, (char*)tmp);
   semaphore_P(block_array[tl]->block_sem);  
   free(tmp);
+
+  // update parent dir
+  dir_entry_num = parent->i_block.u.hdr.count;
+
+  found_entry = 0;
+  tmp_str = (char*)calloc(257, sizeof(char));
+  for (i = 0; i < dir_entry; i++) {
+    for (j = 0; ((j+i) < dir_entry_num) 
+          &&(j < MAX_DIR_ENTRIES_PER_BLOCK); j++) {
+      printf("reading the number %d entry\n", j+i);
+      if (found_entry) {
+        // swap this one and next
+          
+      strcpy(tmp, handle->d_block.u.dir_hdr.data[j].name);
+      file_list[j+i] = tmp;
+    }
+    // copied an entire data block yo
+    // get the next one, if exists
+    if (((j+i) < handle->i_block.u.hdr.count) 
+         && minifile_get_next_block(handle) == -1) {
+      free(handle);
+      semaphore_V(disk_op_lock);
+      return file_list; 
+    }
+    i += j;
+  }; 
+  free(tmp_str);
 
   semaphore_V(inode_lock_table[handle->inode_num]);
   semaphore_V(disk_op_lock);
   printf("exit minifile_unlink on success\n");
   free(handle);
+  */
   return 0;
 }
 
