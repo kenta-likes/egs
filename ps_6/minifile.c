@@ -138,6 +138,10 @@ int math_ceil(int x, int y);
 minifile_t minifile_create_handle(int inode_num);
 int minifile_get_curr_block_num(minifile_t handle);
 
+
+int minifile_get_parent_child_paths(char** parent_dir, char** new_dir_name, char* dirname);
+char* minifile_absolute_path(char* path);
+char* minifile_simplify_path(char* path);
 /* writes num 0's starting at buff
  */
 void blankify(char* buff, int num) {
