@@ -131,6 +131,7 @@ semaphore_t* inode_lock_table;
 
 /* FUNC DEFS */ 
 
+int list_count(char** list);
 void blankify(char* buff, int num);
 int math_ceil(int x, int y);
 minifile_t minifile_create_handle(int inode_num);
@@ -144,6 +145,16 @@ int minifile_get_parent_child_paths(char** parent_dir, char** new_dir_name, char
 char* minifile_absolute_path(char* path);
 char* minifile_simplify_path(char* path);
 int minifile_get_block_from_path(char* path);
+
+int list_count(char** list) {
+  int i, count;
+ 
+  for (i = 0, count = 0; list != NULL && list[i] != NULL; i++) {
+    count++;
+  }
+
+  return count;
+}
 
 /* writes num 0's starting at buff
  */

@@ -15,6 +15,8 @@
 
 typedef struct minifile* minifile_t;
 
+int list_count(char** list);
+
 void minifile_test_make_fs();
 
 /* Called in the mkfs application.
