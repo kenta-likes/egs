@@ -1433,6 +1433,13 @@ minifile_t minifile_open(char *filename, char *mode){
     return NULL;
   }
   //printf("created handle for the file requested\n");
+  //check if it is FILE_t
+  if (handle->i_block.u.hdr.type != FILE_t){
+    semaphore_V(disk_op_lock);
+    printf("%s: Is a directory\n", filename);
+    free(handle);
+    return NULL;
+  }
 
   if (!strcmp(mode, "r")) {  
     handle->mode = READ;
