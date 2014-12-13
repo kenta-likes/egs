@@ -357,13 +357,14 @@ int minifile_get_next_block(minifile_t file_ptr){
  * Will modify whatever is handed in in-place
  * assumes length is maxed at MAX_PATH_SIZE
  * */
-void minifile_simplify_path(char* path){
-  /*
+char* minifile_simplify_path(char* path){
   char* runner;
   char* runner_end;
-  path_list p_list*;
-  path_node p_node;
-  int len;
+  path_list* p_list;
+  path_node* p_node;
+  char* real_path;
+  int real_path_len;
+  int i;
 
   //construct the list structure out of the tokens
   p_list = (path_list*)calloc(1,sizeof(path_list));
@@ -374,32 +375,100 @@ void minifile_simplify_path(char* path){
   p_list->hd = p_node;
 
   runner = path + 1;
+  while (*runner == '/'){ //skip excessive /'s
+    runner++;
+  }
   runner_end = strchr(runner, '/');
-  while (runner_end != NULL){
-    p_node->next = (path_node*)calloc(1,sizeof(path_node));
-    memcpy(p_node->next->name, runner, (int)(runner_end - runner));//store name
-    p_node->next->prev = p_node;
-    p_node = p_node->next;
-    p_list->tl = p_node;
-    runner = runner_end + 1;
+  //set runner_end to location of null char
+  if (runner_end == NULL){
+    runner_end = runner + strlen(runner);
+  }
+  while (runner_end != runner){
+    if ( (int)(runner_end - runner) == 1
+          && (memcmp(runner, ".", (int)(runner_end - runner)) == 0) ){
+      if (*runner_end != '\0'){
+        runner = runner_end + 1;
+      }
+      else {
+        runner = runner_end;
+      }
+    }
+    else if ( (int)(runner_end - runner) >= 2
+          && (memcmp(runner, "..",(int) (runner_end - runner)) == 0) ){
+      if (p_list->len > 1){
+        p_list->tl = p_list->tl->prev;
+        p_node = p_list->tl;
+        free(p_list->tl->next);
+        p_list->tl->next = NULL;
+        (p_list->len)--;
+      }
+      if (*runner_end != '\0'){
+        runner = runner_end + 1;
+      }
+      else {
+        runner = runner_end;
+      }
+    }
+    else {
+      p_node->next = (path_node*)calloc(1,sizeof(path_node));
+      memcpy(p_node->next->name, runner, (int)(runner_end - runner));//store name
+      p_node->next->prev = p_node;
+      p_node = p_node->next;
+      p_list->tl = p_node;
+      (p_list->len)++;
+      if (*runner_end != '\0'){
+        runner = runner_end + 1;
+      }
+      else {
+        runner = runner_end;
+      }
 
-    while (*runner == '/'){ //skip excessive /'s
-      runner++;
+      if (*runner == '\0'){ //ends with /
+        p_node->next = (path_node*)calloc(1,sizeof(path_node));
+        strcpy(p_node->next->name, "/");//store name
+        p_node->next->prev = p_node;
+        p_node = p_node->next;
+        p_list->tl = p_node;
+        (p_list->len)++;
+      }
+      else {
+        p_node->name[strlen(p_node->name) + 1] = '\0';
+        p_node->name[strlen(p_node->name)] = '/';
+      }
+      while (*runner == '/'){ //skip excessive /'s
+        runner++;
+      }
+    }
+
+    runner_end = strchr(runner, '/');
+    if (runner_end == NULL){
+      runner_end = runner + strlen(runner);
     }
   }
-  if ( *runner == '\0'){
-    //no more nodes necessary, last node had trailing /
-  }
-  else {
-    //make new node, store and complete
-  }
-  
-  //read through the tokens, removing unnecessary nodes
 
-  //construct a path from the simplified list and return
-  
-  */
-  return;
+  real_path = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char));
+  real_path_len = 0;
+  p_node = p_list->hd;
+  for (i = 0; i < p_list->len; i++){
+    if (real_path_len + strlen(p_node->name) > MAX_PATH_SIZE){
+      //free and move on...
+      real_path_len = MAX_PATH_SIZE + 1;
+      //free(real_path);
+    }
+    else {
+      strcpy(real_path + real_path_len, p_node->name );
+      real_path_len += strlen(p_node->name);
+      p_node = p_node->next;
+    }
+    //free(p_node->prev);
+  }
+  //free(p_node);
+  //free(p_list);
+  if (real_path_len > MAX_PATH_SIZE){
+    return NULL;
+  }
+  real_path[real_path_len] = '\0';
+  return real_path;
 }
 
 /*
@@ -895,7 +964,6 @@ minifile_t minifile_creat(char *filename){
   printf("New directory: %s\n", new_dir_name);
   printf("Parent directory: %s\n", parent_dir);
   parent_block = (inode_block*)calloc(1, sizeof(inode_block));
-  new_dir = (minifile*)calloc(1, sizeof(minifile));
 
   semaphore_P(disk_op_lock);
   
@@ -906,7 +974,6 @@ minifile_t minifile_creat(char *filename){
     free(parent_dir);
     free(new_dir_name);
     free(parent_block);
-    free(new_dir);
     return NULL;
   }
   parent_block_num = minifile_get_block_from_path(parent_dir);
@@ -916,7 +983,6 @@ minifile_t minifile_creat(char *filename){
     free(parent_dir);
     free(new_dir_name);
     free(parent_block);
-    free(new_dir);
     return NULL;
   }
 
@@ -925,7 +991,10 @@ minifile_t minifile_creat(char *filename){
   printf("got the parent block! Now I just need to get a free inode and add it as an entry\n");
   
   //grab a free inode!
-  new_dir->inode_num = parent_block_num;
+  new_dir = minifile_create_handle(parent_block_num);
+  if (!new_dir){
+    printf("NULL ON MINIFILE_CREATE\n");
+  }
   child_block_num = minifile_new_inode(new_dir, new_dir_name, FILE_t);
   if (child_block_num == -1) {
     semaphore_V(disk_op_lock);
@@ -1498,6 +1567,9 @@ int minifile_cd(char *path){
   int len;
 
   printf("enter minifile_cd\n");
+  printf("==============================YERRR=====================\n");
+  printf(minifile_simplify_path(path));
+  printf("\n");
   
   if (!path || path[0] == '\0'){ //NULL string or empty string
     return -1;
