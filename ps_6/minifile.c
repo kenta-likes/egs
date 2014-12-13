@@ -460,7 +460,7 @@ char* minifile_simplify_path(char* path){
       real_path_len += strlen(p_node->name);
       p_node = p_node->next;
     }
-    free(p_node->prev);
+    //free(p_node->prev);
   }
   //free(p_node);
   //free(p_list);
@@ -964,7 +964,6 @@ minifile_t minifile_creat(char *filename){
   printf("New directory: %s\n", new_dir_name);
   printf("Parent directory: %s\n", parent_dir);
   parent_block = (inode_block*)calloc(1, sizeof(inode_block));
-  new_dir = (minifile*)calloc(1, sizeof(minifile));
 
   semaphore_P(disk_op_lock);
   
@@ -975,7 +974,6 @@ minifile_t minifile_creat(char *filename){
     free(parent_dir);
     free(new_dir_name);
     free(parent_block);
-    free(new_dir);
     return NULL;
   }
   parent_block_num = minifile_get_block_from_path(parent_dir);
@@ -985,7 +983,6 @@ minifile_t minifile_creat(char *filename){
     free(parent_dir);
     free(new_dir_name);
     free(parent_block);
-    free(new_dir);
     return NULL;
   }
 
@@ -994,7 +991,10 @@ minifile_t minifile_creat(char *filename){
   printf("got the parent block! Now I just need to get a free inode and add it as an entry\n");
   
   //grab a free inode!
-  new_dir->inode_num = parent_block_num;
+  new_dir = minifile_create_handle(parent_block_num);
+  if (!new_dir){
+    printf("NULL ON MINIFILE_CREATE\n");
+  }
   child_block_num = minifile_new_inode(new_dir, new_dir_name, FILE_t);
   if (child_block_num == -1) {
     semaphore_V(disk_op_lock);
