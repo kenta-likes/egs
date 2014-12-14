@@ -1,7 +1,9 @@
 /* filetest1.c
  * ls on root directory to make sure it is empty
- * make 1000 directories
+ * make max_num directories
  * ls to make sure new dirs were added
+ * make one more directory
+ * make sure that operation fails
  */
 
 
