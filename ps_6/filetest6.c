@@ -51,7 +51,7 @@ int test(int* arg) {
     return -1;
   }
 
-  file = minifile_open("foo.txt", "w+");
+  file = minifile_open("foo.txt", "r");
   if (!file) {
     printf("minifile_open failed\n");
     return -1;
