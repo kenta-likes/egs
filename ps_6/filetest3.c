@@ -1,9 +1,6 @@
-/* filetest1.c
- * ls on root directory to make sure it is empty
- * make max_num directories
- * ls to make sure new dirs were added
- * make one more directory
- * make sure that operation fails
+/* filetest3.c
+ * make and remove 4800 directories.
+ * make sure blocks don't get lost.
  */
 
 
@@ -19,56 +16,30 @@
 int use_existing_disk;
 int disk_flags;
 int disk_size;
-int max;
 
 int test(int* arg) {
-  char** file_list;
-  int i;
+  int i,j;
   char name[257]; 
 
-  printf("testing ls on root\n");   
-  file_list = minifile_ls("/");
-  if (!file_list) {
-    printf("ls failed. abort!\n");
-    return -1;
-  }
-  
+  for (i = 0; i < 100; i++) { 
+    printf("iteration: %d\n", i);
 
-  assert(list_count(file_list) == 2);
-  assert(!strcmp(file_list[0], "."));
-  free(file_list[0]);
-  assert(!strcmp(file_list[1], ".."));
-  free(file_list[1]);
-  free(file_list);
-  printf("root test passed\n");
-
-  for (i = 0; i < (max - 2); i++) {
-    sprintf(name, "%d", i);
-    if (minifile_mkdir(name) == -1) {
-      printf("mkdir failed on %dth entry. abort!\n", i+1);
-      return -1;
+    for (j = 0; j < 48; j++) {
+      sprintf(name, "%d", j);
+      if (minifile_mkdir(name) == -1) {
+        printf("mkdir failed on %dth entry. abort!\n", j+1);
+        return -1;
+      }
     }
-  }
 
-  file_list = minifile_ls("/");
-  if (!file_list) {
-    printf("ls failed. abort!\n");
-    return -1;
+    for (j = 0; j < 48; j++) {
+      sprintf(name, "%d", j);
+      if (minifile_rmdir(name) == -1) {
+        printf("rmdir failed on %dth entry. abort!\n", j+1);
+        return -1;
+      }
+    } 
   }
-  
-  assert(list_count(file_list) == max);
-  assert(!strcmp(file_list[0], "."));
-  free(file_list[0]);
-  assert(!strcmp(file_list[1], ".."));
-  free(file_list[1]);
-
-  for (i = 2; i < max; i++) {
-    sprintf(name, "%d", i-2);
-    assert(!strcmp(file_list[i], name));
-    free(file_list[i]);
-  }
-  free(file_list);
-  
   printf("all tests pass\n");
   return 0;
 }
@@ -83,11 +54,9 @@ int main(int argc, char** argv) {
   use_existing_disk = 0;
   disk_name = "MINIFILESYSTEM";
   disk_flags = DISK_READWRITE;
-  disk_size = 15000;
+  disk_size = 750;
   
   system("rm MINIFILESYSTEM");
-
-  max = 1000;
 
   minithread_system_initialize(init, NULL);
   return 0; 

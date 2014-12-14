@@ -278,8 +278,8 @@ int minifile_rm_dblock(minifile_t handle, int block_idx) {
     return -1;
   }
 
-  if (handle->i_block.u.hdr.type != FILE_t) {
-    printf("error: input not file\n");
+  if (handle->i_block.u.hdr.type != FILE_t && handle->i_block.u.hdr.type != DIR_t) {
+    printf("error: input not file or directory\n");
     return -1;
   }
 
@@ -309,7 +309,7 @@ int minifile_rm_dblock(minifile_t handle, int block_idx) {
     semaphore_P(block_array[tl]->block_sem);  
     // old tail flushed to disk
 
-    printf("changed free_dblock_tl to point to this block\n");
+    // printf("changed free_dblock_tl to point to this block\n");
 
     free(tmp);
     super->u.hdr.free_dblock_tl = block_num;
@@ -338,18 +338,18 @@ int minifile_rm_dblock(minifile_t handle, int block_idx) {
     handle->i_block.u.hdr.d_ptrs[block_idx] = 0;
     disk_write_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
     semaphore_P(block_array[handle->inode_num]->block_sem);  
-    printf("Nullified ptr...and updated count\n");
+    // printf("Nullified ptr...and updated count\n");
   }
   else {
     handle->indirect_block.u.indirect_hdr.d_ptrs[block_idx-11] = 0;
     disk_write_block(my_disk, handle->i_block.u.hdr.i_ptr, 
         (char*)&(handle->indirect_block));
     semaphore_P(block_array[handle->i_block.u.hdr.i_ptr]->block_sem);  
-    printf("Nullified ptr...");
+    // printf("Nullified ptr...");
 
     disk_write_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
     semaphore_P(block_array[handle->inode_num]->block_sem);  
-    printf("and updated count\n");
+    // printf("and updated count\n");
   }
 
   tmp = (data_block*)calloc(1, sizeof(data_block));
@@ -357,11 +357,11 @@ int minifile_rm_dblock(minifile_t handle, int block_idx) {
   disk_write_block(my_disk, block_num, (char*)tmp);
   semaphore_P(block_array[block_num]->block_sem);  
   free(tmp);
-  printf("nullified and freed new free_dblock_tl\n");  
+  // printf("nullified and freed new free_dblock_tl\n");  
 
   disk_write_block(my_disk, 0, (char*)super);
   semaphore_P(block_array[0]->block_sem);  
-  printf("updated super block free_dblock ptrs\n");
+  // printf("updated super block free_dblock ptrs\n");
     
   free(super);
   printf("exit minifile_rm_dblock on success\n\n");
@@ -382,15 +382,15 @@ int minifile_truncate(minifile_t handle) {
     return -1;
   }
 
-  if (handle->i_block.u.hdr.type != FILE_t) {
-    printf("minifile_truncate called on non-file type\n");
+  if (handle->i_block.u.hdr.type != FILE_t && handle->i_block.u.hdr.type != DIR_t) {
+    printf("minifile_truncate called on non-file and non-dir type\n");
     return -1;
   }
 
-  dblock_num = math_ceil(handle->i_block.u.hdr.count, DATA_BLOCK_SIZE); 
+  dblock_num = math_ceil(handle->i_block.u.hdr.count, DATA_BLOCK_SIZE) - 1; 
    
   for (block_idx = dblock_num; block_idx >= 0; block_idx--) {
-    if (minifile_rm_dblock(handle, block_idx)) {
+    if (minifile_rm_dblock(handle, block_idx) == -1) {
       printf("rm a dblock failed. abort!\n");
       return -1;
     }
@@ -431,7 +431,7 @@ int minifile_rm_dir_entry(minifile_t handle, char* name) {
 
   // copy last_entry
   block_idx = math_ceil(handle->i_block.u.hdr.count, MAX_DIR_ENTRIES_PER_BLOCK) - 1;
-  entry_num = handle->i_block.u.hdr.count % MAX_DIR_ENTRIES_PER_BLOCK -1;
+  entry_num = (handle->i_block.u.hdr.count-1) % MAX_DIR_ENTRIES_PER_BLOCK;
 
   printf("copying last entry from block: %d, entry: %d\n", block_idx, entry_num);
   handle->block_cursor = block_idx;
@@ -477,18 +477,7 @@ int minifile_rm_dir_entry(minifile_t handle, char* name) {
         semaphore_P(block_array[block_num]->block_sem);
   
         // erase last entry 
-        handle->block_cursor = block_idx;
 
-        block_num = minifile_get_next_block(handle);
-        if (block_num == -1) {
-          printf("minifile_get_next_block failed. aborting!\n");
-          return -1;
-        }
-
-        blankify((char*)&(handle->d_block.u.dir_hdr.data[entry_num]), sizeof(dir_entry));
-        disk_write_block(my_disk, block_num, (char*)&(handle->d_block));
-        semaphore_P(block_array[block_num]->block_sem); 
-        
         // if last entry on this dblock, rm the dblock
         if (entry_num == 0) {
           printf("rm the last entry on this dblock, free it\n");
@@ -496,6 +485,19 @@ int minifile_rm_dir_entry(minifile_t handle, char* name) {
             printf("minifile_rm_dblock failed. aborting!\n");
             return -1;
           }
+        }
+        else {
+          handle->block_cursor = block_idx;
+
+          block_num = minifile_get_next_block(handle);
+          if (block_num == -1) {
+            printf("minifile_get_next_block failed. aborting!\n");
+            return -1;
+          }
+
+          blankify((char*)&(handle->d_block.u.dir_hdr.data[entry_num]), sizeof(dir_entry));
+          disk_write_block(my_disk, block_num, (char*)&(handle->d_block));
+          semaphore_P(block_array[block_num]->block_sem); 
         }
     
         printf("exit minifile_rm_dir_entry on success\n\n");
@@ -533,6 +535,11 @@ int minifile_free_inode(minifile_t parent, minifile_t handle, char* name) {
     printf("invalid params\n");
     return -1;
   }
+   
+  if (minifile_truncate(handle) == -1){
+    printf("minifile_truncate failed\n");
+    return -1;
+  }
 
   // change free_iblock_tl to point to this block 
   super = (super_block*)calloc(1, sizeof(super_block));
@@ -556,7 +563,7 @@ int minifile_free_inode(minifile_t parent, minifile_t handle, char* name) {
     semaphore_P(block_array[tl]->block_sem);  
     // old tail flushed to disk
 
-    printf("changed free_iblock_tl to point to this block\n");
+    // printf("changed free_iblock_tl to point to this block\n");
     free(tmp);
     super->u.hdr.free_iblock_tl = block_num;
   }
@@ -568,7 +575,7 @@ int minifile_free_inode(minifile_t parent, minifile_t handle, char* name) {
   disk_write_block(my_disk, block_num, (char*)tmp);
   semaphore_P(block_array[block_num]->block_sem);  
   free(tmp);
-  printf("nullified and freed new free_iblock_tl\n");  
+  // printf("nullified and freed new free_iblock_tl\n");  
 
   // update the parent dir
   if (minifile_rm_dir_entry(parent, name) == -1) {

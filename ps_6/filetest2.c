@@ -1,4 +1,4 @@
-/* filetest1.c
+/* filetest2.c
  * ls on root directory to make sure it is empty
  * make 1000 directories
  * ls to make sure new dirs were added
