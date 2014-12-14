@@ -1603,35 +1603,53 @@ int minifile_write(minifile_t file, char *data, int len){
 
   //if there was a previous block first use it
   if ( ((file->byte_cursor) % DATA_BLOCK_SIZE != 0)){
+    printf("FOUND A PREVIOUS BLOCK!!");
     curr_data_block = minifile_get_next_block(file);
     if (curr_data_block == -1){ //load up the next block
       semaphore_V(disk_op_lock);
       printf("Could not get the next block!\n");
       return -1;
     }
+    printf("WRITING TO A PREVIOUS BLOCK!!");
     //write awayyyyy
-    if (((file->byte_cursor) % DATA_BLOCK_SIZE) <= len){
+    if (DATA_BLOCK_SIZE - ((file->byte_cursor) % DATA_BLOCK_SIZE) <= len){
+      printf("len larger case, prev:%.*s", file->byte_cursor, file->d_block.u.file_hdr.data);
       memcpy( (file->d_block.u.file_hdr.data) + ((file->byte_cursor)%DATA_BLOCK_SIZE),
               data + bytes_written, //should just be 0
               DATA_BLOCK_SIZE - ((file->byte_cursor) % DATA_BLOCK_SIZE));
-      disk_write_block(my_disk, curr_data_block, file->d_block.u.file_hdr.data);
+      bytes_written += DATA_BLOCK_SIZE - ((file->byte_cursor) % DATA_BLOCK_SIZE);
+      file->byte_cursor += DATA_BLOCK_SIZE - ((file->byte_cursor) % DATA_BLOCK_SIZE);
+      file->i_block.u.hdr.count += DATA_BLOCK_SIZE - ((file->byte_cursor) % DATA_BLOCK_SIZE);
+      disk_write_block(my_disk, file->inode_num, (char*)(&file->i_block)); //NEW: inode block
+      semaphore_P(block_array[file->inode_num]->block_sem);
+      disk_write_block(my_disk, curr_data_block, (char*)(&file->d_block));
       semaphore_P(block_array[curr_data_block]->block_sem);
-      bytes_written += ((file->byte_cursor) % DATA_BLOCK_SIZE);
-      file->byte_cursor += ((file->byte_cursor) % DATA_BLOCK_SIZE);
+      printf("len larger case, now:%.*s", file->byte_cursor, file->d_block.u.file_hdr.data);
+      if ( minifile_new_dblock(file, &(file->d_block), len) == -1){
+        semaphore_V(disk_op_lock);
+        printf("Could not get new dblock\n");
+        return -1;
+      }
     }
     else {
+      printf("len smaller case, prev:%.*s", file->byte_cursor, file->d_block.u.file_hdr.data);
       memcpy( (file->d_block.u.file_hdr.data) + ((file->byte_cursor)%DATA_BLOCK_SIZE),
               data + bytes_written, //should just be 0
               DATA_BLOCK_SIZE - len);
-      disk_write_block(my_disk, curr_data_block, file->d_block.u.file_hdr.data);
-      semaphore_P(block_array[curr_data_block]->block_sem);
       bytes_written += len;
       file->byte_cursor += len;
+      file->i_block.u.hdr.count += len;
+      disk_write_block(my_disk, file->inode_num, (char*)(&file->i_block)); //NEW: inode block
+      semaphore_P(block_array[file->inode_num]->block_sem);
+      disk_write_block(my_disk, curr_data_block, (char*)(&file->d_block));
+      semaphore_P(block_array[curr_data_block]->block_sem);
+      printf("len smaller case, now:%.*s", file->byte_cursor, file->d_block.u.file_hdr.data);
+      file->block_cursor -= 1;
     }
   }
-
+  printf("bytes written: %i, write cap: %i\n", bytes_written, write_cap);
   while (bytes_written < write_cap){
-    printf("right after while. write_cap:%i, bytes_written: %i\n", write_cap, bytes_written);
+    printf("right after while. bytes_written: %i, write_cap:%i \n", bytes_written, write_cap);
     //allocate new blocks and keep writing
     cap = DATA_BLOCK_SIZE<(write_cap-bytes_written)? DATA_BLOCK_SIZE : (write_cap-bytes_written);
     blankify((char*)(&(file->d_block)), sizeof(data_block));
