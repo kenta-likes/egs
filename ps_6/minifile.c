@@ -156,6 +156,15 @@ int list_count(char** list) {
   return count;
 }
 
+int list_print(char** list) {
+  int i, count;
+ 
+  for (i = 0, count = 0; list != NULL && list[i] != NULL; i++) {
+    printf("%s\n",list[i]);
+  }
+
+  return count;
+}
 /* writes num 0's starting at buff
  */
 void blankify(char* buff, int num) {
@@ -408,6 +417,8 @@ int minifile_rm_dir_entry(minifile_t handle, char* name) {
 
   printf("enter minifile_rm_dir_entry\n");
 
+  printf("called on %s\n", name);
+
   if (!handle) {
     printf("invalid params\n");
     return -1;
@@ -420,7 +431,7 @@ int minifile_rm_dir_entry(minifile_t handle, char* name) {
 
   // copy last_entry
   block_idx = math_ceil(handle->i_block.u.hdr.count, MAX_DIR_ENTRIES_PER_BLOCK) - 1;
-  entry_num = handle->i_block.u.hdr.count % MAX_DIR_ENTRIES_PER_BLOCK;
+  entry_num = handle->i_block.u.hdr.count % MAX_DIR_ENTRIES_PER_BLOCK -1;
 
   printf("copying last entry from block: %d, entry: %d\n", block_idx, entry_num);
   handle->block_cursor = block_idx;
@@ -444,11 +455,11 @@ int minifile_rm_dir_entry(minifile_t handle, char* name) {
     printf("minifile_get_next_block failed. aborting!\n");
     return -1;
   }
-   
+
   for (i = 0; i < total; i+=j) {
     for (j = 0; ((j+i) < total) && (j < MAX_DIR_ENTRIES_PER_BLOCK); j++) {
       if (!strcmp(handle->d_block.u.dir_hdr.data[j].name, name)) {
-        printf("found dir entry to remove\n");
+        printf("found dir entry %s at idx %d\n", handle->d_block.u.dir_hdr.data[j].name, i+j);
 
         // erase the entry 
         blankify((char*)&(handle->d_block.u.dir_hdr.data[j]), sizeof(dir_entry));
@@ -457,7 +468,7 @@ int minifile_rm_dir_entry(minifile_t handle, char* name) {
 
         // update count in inode
         (handle->i_block.u.hdr.count)--;
-        disk_write_block(my_disk, handle->inode_num, (char*)&(handle->d_block));
+        disk_write_block(my_disk, handle->inode_num, (char*)&(handle->i_block));
         semaphore_P(block_array[handle->inode_num]->block_sem);
 
         // copy in last entry
@@ -487,7 +498,7 @@ int minifile_rm_dir_entry(minifile_t handle, char* name) {
           }
         }
     
-        printf("exit minifile_rm_dir_entry on success\n");
+        printf("exit minifile_rm_dir_entry on success\n\n");
         return 0;
       }
     }
@@ -497,11 +508,10 @@ int minifile_rm_dir_entry(minifile_t handle, char* name) {
       printf("minifile_get_next_block failed. aborting!\n");
       return -1;
     }
-    
-  
-  }
-  printf("exit minifile_rm_dir_entry on success\n");
-  return 0;
+  } 
+
+  printf("could not find entry in list\n");
+  return -1;
 }
 
 /* add this inode to end of free inode list
@@ -546,15 +556,9 @@ int minifile_free_inode(minifile_t parent, minifile_t handle, char* name) {
     semaphore_P(block_array[tl]->block_sem);  
     // old tail flushed to disk
 
-    //printf("changed free_iblock_tl to point to this block\n");
-
+    printf("changed free_iblock_tl to point to this block\n");
     free(tmp);
     super->u.hdr.free_iblock_tl = block_num;
-    // super block ptrs changed in memory but not disk yet 
-  }
-  else {
-    super->u.hdr.free_iblock_tl = block_num;
-    super->u.hdr.free_iblock_hd = block_num;
   }
   // super block ptrs changed in memory but not disk yet 
   
@@ -564,7 +568,7 @@ int minifile_free_inode(minifile_t parent, minifile_t handle, char* name) {
   disk_write_block(my_disk, block_num, (char*)tmp);
   semaphore_P(block_array[block_num]->block_sem);  
   free(tmp);
-  //printf("nullified and freed new free_iblock_tl\n");  
+  printf("nullified and freed new free_iblock_tl\n");  
 
   // update the parent dir
   if (minifile_rm_dir_entry(parent, name) == -1) {
@@ -1604,6 +1608,7 @@ int minifile_write(minifile_t file, char *data, int len){
   printf("exit minifile_write on success\n\n");
   */
 
+  */
   return 0;
 }
 
@@ -1887,7 +1892,7 @@ int minifile_rmdir(char *dirname){
     return -1; 
   }
       
-  if (handle->i_block.u.hdr.count) {
+  if (handle->i_block.u.hdr.count > 2) {
     printf("rmdir: failed to remove '%s': Directory not empty\n", dirname);
     free(handle);
     semaphore_V(disk_op_lock);
