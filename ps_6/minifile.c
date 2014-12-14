@@ -1276,20 +1276,27 @@ int minifile_new_inode(minifile_t handle, char* name, char type) {
 int minifile_get_parent_child_paths(char** parent_dir, char** new_dir_name, char* dirname){
   int name_len;
   int i;
+  char* abs_path;
+  char* real_path;
+
   *parent_dir = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char)); //allocate path holder
   *new_dir_name = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char)); //allocate dir name holder
-  strcpy(*parent_dir, dirname);
+  abs_path = minifile_absolute_path(dirname);
+  real_path = minifile_simplify_path(abs_path);
+  free(abs_path);
+  strcpy(*parent_dir, real_path);
 
   //clip off trailing /'s
-  name_len = strlen(dirname);
+  name_len = strlen(real_path);
   i = name_len - 1;
   while ((*parent_dir)[i] == '/' && i >= 0){
     (*parent_dir)[i] = '\0'; //nullify
     i--;
   }
-  if (i < 0){ //if name was only /'s
+  if (i < 0 || strcmp(real_path, "/") == 0){ //if name was only /'s
     free(*parent_dir);
     free(*new_dir_name);
+    free(real_path);
     return -1;
   }
 
@@ -1312,6 +1319,7 @@ int minifile_get_parent_child_paths(char** parent_dir, char** new_dir_name, char
     (*parent_dir)[1] = '\0';
   }
 
+  free(real_path);
   return 0;
 }
 
@@ -1608,7 +1616,6 @@ int minifile_write(minifile_t file, char *data, int len){
   printf("exit minifile_write on success\n\n");
   */
 
-  */
   return 0;
 }
 
