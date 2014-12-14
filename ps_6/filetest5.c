@@ -1,5 +1,5 @@
-/* filetest3.c
- * nested mkdir.
+/* filetest4.c
+ * create and rm an empty file
  */
 
 
@@ -17,33 +17,24 @@ int disk_flags;
 int disk_size;
 
 int test(int* arg) {
-  int i;
-  char name[257]; 
+  minifile_t file;
 
-  for (i = 0; i < 50; i++) {
-    sprintf(name, "%d", i);
-    if (minifile_mkdir(name) == -1) {
-      printf("mkdir failed on %dth entry. abort!\n", i);
-      return -1;
-    }
-    if (minifile_cd(name) == -1) {
-      printf("cd failed on %dth entry. abort!\n", i);
-      return -1;
-    }
+  file = minifile_creat("foo.txt");
+  if (!file) {
+    printf("minifile_creat failed\n");
+    return -1;
   }
 
-  for (i = 49; i >= 0; i--) {
-    sprintf(name, "%d", i);
-    if (minifile_cd("..") == -1) {
-      printf("cd failed on %dth entry. abort!\n", i);
-      return -1;
-    }
-    printf("curr dir: %s\n", minifile_pwd());
-    if (minifile_rmdir(name) == -1) {
-      printf("rmdir failed on %dth entry. abort!\n", i);
-      return -1;
-    }
+  if (minifile_close(file) == -1) {
+    printf("minifile_close failed\n");
+    return -1;
   }
+
+  if (minifile_unlink("foo.txt") == -1) {
+    printf("minifile_unlink failed\n");
+    return -1;
+  }
+
   printf("all tests pass\n");
   return 0;
 }
@@ -58,7 +49,7 @@ int main(int argc, char** argv) {
   use_existing_disk = 0;
   disk_name = "MINIFILESYSTEM";
   disk_flags = DISK_READWRITE;
-  disk_size = 1000;
+  disk_size = 100;
   
   system("rm MINIFILESYSTEM");
 
