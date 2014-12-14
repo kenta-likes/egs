@@ -57,9 +57,9 @@ bcast_t topology;
 short my_udp_port = MINIMSG_PORT;
 short other_udp_port = MINIMSG_PORT;
 
-double loss_rate = 0.0;
-double duplication_rate = 0.0;
-int synthetic_network = 0;
+double loss_rate = 0.1;
+double duplication_rate = 0.1;
+int synthetic_network = 1;
 
 
 struct address_info {

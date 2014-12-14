@@ -32,7 +32,9 @@ typedef struct resend_arg {
   char* data;
   char msg_type;
   minisocket_error *error;
-}* resend_arg_t;
+} resend_arg;
+
+typedef resend_arg* resend_arg_t;
 
 minisocket_t* sock_array;
 semaphore_t client_lock;
@@ -133,6 +135,7 @@ void minisocket_send_data(minisocket_t sock, unsigned int data_len, char* data, 
 void minisocket_resend(void* arg) {
   int wait_cycles;
   resend_arg_t params = (resend_arg_t)arg;
+  printf("resend called on %li\n", (long)arg);
   //printf("resend called during state %i on try %d\n", params->sock->curr_state, params->sock->try_count);
   params->sock->try_count++;
   if (params->sock->try_count >= 7) {
@@ -241,7 +244,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
   minisocket_t new_sock;
   interrupt_level_t l;
   network_interrupt_arg_t * pkt;
-  struct resend_arg resend_alarm_arg;
+  resend_arg* resend_alarm_arg;
   char tmp; 
 
   //check valid portnum
@@ -315,6 +318,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
   sock_array[port] = new_sock;
   semaphore_V(server_lock);
  
+  resend_alarm_arg = (resend_arg*)calloc(1, sizeof(resend_arg));
   while (1) {
     // wait for MSG_SYN
     semaphore_P(new_sock->ack_ready_sem);
@@ -324,12 +328,12 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
     case CONNECTING:  
       minisocket_send_ctrl(MSG_SYNACK, new_sock, error);
 
-      resend_alarm_arg.sock = new_sock;
-      resend_alarm_arg.msg_type = MSG_SYNACK;
-      resend_alarm_arg.data_len = 0;
-      resend_alarm_arg.data = &tmp; //placeholder
-      resend_alarm_arg.error = error; 
-      new_sock->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
+      resend_alarm_arg->sock = new_sock;
+      resend_alarm_arg->msg_type = MSG_SYNACK;
+      resend_alarm_arg->data_len = 0;
+      resend_alarm_arg->data = &tmp; //placeholder
+      resend_alarm_arg->error = error; 
+      new_sock->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, resend_alarm_arg, minithread_time());
       
       new_sock->curr_state = MSG_WAIT;
       set_interrupt_level(l);
@@ -344,6 +348,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
       *error = SOCKET_NOERROR;
       set_interrupt_level(l);
       //printf("exiting server_create\n");
+      free(resend_alarm_arg);
       return new_sock;
       break;
 
@@ -360,6 +365,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
       break;
     }
   }
+  free(resend_alarm_arg);
   return new_sock;
 }
 
@@ -380,7 +386,7 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
 {
   minisocket_t new_sock;
   interrupt_level_t l;
-  struct resend_arg resend_alarm_arg;
+  resend_arg* resend_alarm_arg;
   unsigned short start; 
   char tmp;
 
@@ -463,12 +469,13 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
  
   l = set_interrupt_level(DISABLED);
   minisocket_send_ctrl(MSG_SYN, new_sock, error);
-  resend_alarm_arg.sock = new_sock;
-  resend_alarm_arg.msg_type = MSG_SYN;
-  resend_alarm_arg.data_len = 0;
-  resend_alarm_arg.data = &tmp; //placeholder
-  resend_alarm_arg.error = error; 
-  new_sock->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
+  resend_alarm_arg = (resend_arg*)calloc(1, sizeof(resend_arg));
+  resend_alarm_arg->sock = new_sock;
+  resend_alarm_arg->msg_type = MSG_SYN;
+  resend_alarm_arg->data_len = 0;
+  resend_alarm_arg->data = &tmp; //placeholder
+  resend_alarm_arg->error = error; 
+  new_sock->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, resend_alarm_arg, minithread_time());
   set_interrupt_level(l);
 
   semaphore_P(new_sock->ack_ready_sem);
@@ -507,7 +514,7 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
     new_sock = NULL;
     break;
   }
-
+  free(resend_alarm_arg);
   return new_sock;
 }
 
@@ -538,7 +545,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
   unsigned int num_pkt;
   unsigned int i;
   interrupt_level_t l;
-  struct resend_arg resend_alarm_arg;
+  resend_arg* resend_alarm_arg;
   unsigned int max_size;
 
   //printf("in minisocket_send\n");
@@ -557,7 +564,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
   if (len == 0){
     return 0;
   }
- 
+
   //check for invalid cases
   l = set_interrupt_level(DISABLED);
   if (socket->curr_state != CONNECTED){
@@ -580,12 +587,16 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
     set_interrupt_level(l);
     return -1;
   }
+
+  resend_alarm_arg = (resend_arg*)calloc(1, sizeof(resend_arg));
+
   //otherwise register an alarm for resending and proceed
-  resend_alarm_arg.sock = socket;
-  resend_alarm_arg.msg_type = MSG_ACK;
-  resend_alarm_arg.data_len = len>max_size?max_size:len;
-  resend_alarm_arg.data = msg;
-  resend_alarm_arg.error = error;
+  resend_alarm_arg->sock = socket;
+  resend_alarm_arg->msg_type = MSG_ACK;
+  resend_alarm_arg->data_len = len>max_size?max_size:len;
+  resend_alarm_arg->data = msg; //placeholder
+  resend_alarm_arg->error = error; 
+  socket->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, resend_alarm_arg, minithread_time());
 
   if (socket->resend_alarm){
     deregister_alarm(socket->resend_alarm);
@@ -610,6 +621,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
       semaphore_V(socket->ack_ready_sem); //notify close thread
       *error = SOCKET_SENDERROR;
       set_interrupt_level(l);
+      free(resend_alarm_arg); 
       return i * max_size;
     case CONNECTED: 
       i++;
@@ -625,25 +637,27 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
 
       if (*error != SOCKET_NOERROR){//TODO:may not need to do this
         set_interrupt_level(l);
+        free(resend_alarm_arg); 
         return -1;
       }
       //otherwise register an alarm for resending and proceed
-      resend_alarm_arg.sock = socket;
-      resend_alarm_arg.msg_type = MSG_ACK;
-      resend_alarm_arg.data_len = i<num_pkt-1? max_size : len-(max_size*i);
-      resend_alarm_arg.data = ((char*)msg) + i*max_size;
-      resend_alarm_arg.error = error;
+      resend_alarm_arg->sock = socket;
+      resend_alarm_arg->msg_type = MSG_ACK;
+      resend_alarm_arg->data_len = i<num_pkt-1? max_size : len-(max_size*i);
+      resend_alarm_arg->data = ((char*)msg) + i*max_size;
+      resend_alarm_arg->error = error;
       if (socket->resend_alarm) {
         deregister_alarm(socket->resend_alarm);
         socket->resend_alarm = NULL;
       }
-      socket->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
+      socket->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, resend_alarm_arg, minithread_time());
       socket->curr_state = MSG_WAIT;
       set_interrupt_level(l);
       break;
     default: // error case, simply return
       *error = SOCKET_SENDERROR;
       set_interrupt_level(l);
+      free(resend_alarm_arg); 
       return i * max_size;
     }
   }
@@ -651,6 +665,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
   *error = SOCKET_NOERROR;
   //printf("return on send SUCCESS!\n");
   //printf("exiting send with socket at state %d\n", socket->curr_state);
+  free(resend_alarm_arg); 
   return len;
 }
 
