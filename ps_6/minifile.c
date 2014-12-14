@@ -1625,17 +1625,17 @@ int minifile_write(minifile_t file, char *data, int len){
       disk_write_block(my_disk, curr_data_block, (char*)(&file->d_block));
       semaphore_P(block_array[curr_data_block]->block_sem);
       printf("len larger case, now:%.*s", file->byte_cursor, file->d_block.u.file_hdr.data);
-      if ( minifile_new_dblock(file, &(file->d_block), len) == -1){
+      /*if ( minifile_new_dblock(file, &(file->d_block), len) == -1){
         semaphore_V(disk_op_lock);
         printf("Could not get new dblock\n");
         return -1;
-      }
+      }*/
     }
     else {
       printf("len smaller case, prev:%.*s", file->byte_cursor, file->d_block.u.file_hdr.data);
       memcpy( (file->d_block.u.file_hdr.data) + ((file->byte_cursor)%DATA_BLOCK_SIZE),
               data + bytes_written, //should just be 0
-              DATA_BLOCK_SIZE - len);
+              len);
       bytes_written += len;
       file->byte_cursor += len;
       file->i_block.u.hdr.count += len;
