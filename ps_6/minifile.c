@@ -1518,6 +1518,7 @@ int minifile_read(minifile_t file, char *data, int maxlen){
   int bytes_read;
   int read_cap;
 
+  printf("enter minifile_read\n");
   bytes_read = 0;
   if ( !( file->mode ==  READ
           || file->mode ==  READ_WRITE
@@ -1531,7 +1532,6 @@ int minifile_read(minifile_t file, char *data, int maxlen){
   read_cap = maxlen<((file->i_block.u.hdr.count)-(file->byte_cursor))?
               maxlen : (file->i_block.u.hdr.count)-(file->byte_cursor);
   semaphore_P(disk_op_lock);
-  printf("enter minifile_read\n");
   printf("maxlen %i\n", maxlen);
   printf("count: %i, bytes_read: %i, read_cap: %i\n",file->i_block.u.hdr.count, bytes_read, read_cap);
   while (bytes_read < read_cap){
@@ -1639,12 +1639,12 @@ int minifile_write(minifile_t file, char *data, int len){
       bytes_written += len;
       file->byte_cursor += len;
       file->i_block.u.hdr.count += len;
+      file->block_cursor -= 1;//set back to original block for next guy
       disk_write_block(my_disk, file->inode_num, (char*)(&file->i_block)); //NEW: inode block
       semaphore_P(block_array[file->inode_num]->block_sem);
       disk_write_block(my_disk, curr_data_block, (char*)(&file->d_block));
       semaphore_P(block_array[curr_data_block]->block_sem);
       printf("len smaller case, now:%.*s", file->byte_cursor, file->d_block.u.file_hdr.data);
-      file->block_cursor -= 1;
     }
   }
   printf("bytes written: %i, write cap: %i\n", bytes_written, write_cap);
@@ -2026,10 +2026,11 @@ int minifile_stat(char *path){
     semaphore_V(disk_op_lock);
     free(file_ptr);
     printf("Is a directory\n");
-    return -1;
+    return -2;
   }
 
   semaphore_V(disk_op_lock);
+  printf("exit minifile_stat on success\n");
   return file_ptr->i_block.u.hdr.count;
 }
 
