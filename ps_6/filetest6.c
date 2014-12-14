@@ -1,5 +1,5 @@
 /* filetest4.c
- * create and rm an empty file
+ * create, write, read and rm a file
  */
 
 
@@ -18,10 +18,52 @@ int disk_size;
 
 int test(int* arg) {
   minifile_t file;
+  char** file_list;
+  char* data;
+  char buff[10];
+
+  data = "hello"; 
 
   file = minifile_creat("foo.txt");
   if (!file) {
     printf("minifile_creat failed\n");
+    return -1;
+  }
+
+  file_list = minifile_ls("/foo.txt");
+  if (!file_list) {
+    printf("ls failed\n");
+    return -1;
+  }
+
+  if (!strcmp(file_list[0], "foo.txt")) {
+    printf("ls failed\n");
+    return -1;
+  }
+
+  if (minifile_write(file, data, 6) == -1) {
+    printf("write failed\n");
+    return -1;
+  }
+ 
+  if (minifile_close(file) == -1) {
+    printf("minifile_close failed\n");
+    return -1;
+  }
+
+  file = minifile_open("foo.txt", "w+");
+  if (!file) {
+    printf("minifile_open failed\n");
+    return -1;
+  }
+    
+  if (minifile_read(file, buff, 6) == -1) {
+    printf("minifile_read failed\n");
+    return -1;
+  }
+
+  if (strcmp(buff, data)) {
+    printf("minifile_read failed\n");
     return -1;
   }
 

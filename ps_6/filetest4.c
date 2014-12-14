@@ -1,4 +1,4 @@
-/* filetest3.c
+/* filetest4.c
  * nested mkdir.
  */
 

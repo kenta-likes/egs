@@ -2089,6 +2089,14 @@ char **minifile_ls(char *path){
     return NULL; 
   }
 
+  if (handle->i_block.u.hdr.type == FILE_t) {
+    printf("ls called on a file type\n");
+    file_list = (char**)calloc(2, sizeof(char*));
+    file_list[0] = path; 
+    semaphore_V(disk_op_lock);
+    return file_list;
+  }
+  
   if (minifile_get_next_block(handle) == -1) {
     printf("get next block failed\n");
     free(handle);
@@ -2096,15 +2104,6 @@ char **minifile_ls(char *path){
     return NULL;
   }
     
-  if (handle->i_block.u.hdr.type == FILE_t) {
-    printf("ls called on a file type\n");
-    free(handle);
-    file_list = (char**)calloc(2, sizeof(char*));
-    file_list[0] = path; 
-    semaphore_V(disk_op_lock);
-    return file_list;
-  }
-  
   file_list = (char**)calloc(handle->i_block.u.hdr.count + 1, sizeof(char*));
  
   //printf("dir count is %d\n", handle->i_block.u.hdr.count);
