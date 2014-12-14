@@ -732,7 +732,12 @@ void minisocket_close(minisocket_t socket)
 {
   interrupt_level_t l;
   minisocket_error error;
-  struct resend_arg resend_alarm_arg;
+  resend_arg_t resend_alarm_arg;
+
+  resend_alarm_arg = (resend_arg_t)calloc(1,sizeof(struct resend_arg));
+  if (!resend_alarm_arg){
+    return;
+  }
   error = SOCKET_NOERROR;
 
   //printf("in minisocket_close\n");
@@ -745,6 +750,7 @@ void minisocket_close(minisocket_t socket)
  
   //ill formed argument 
   if (!sock_array){
+    free(resend_alarm_arg);
     return;
   }
 
@@ -752,10 +758,12 @@ void minisocket_close(minisocket_t socket)
   //ill formed argument
   if (sock_array[socket->src_port] == NULL){
     set_interrupt_level(l);
+    free(resend_alarm_arg);
     return;
   }
   if (socket->curr_state == CLOSE_SEND || socket->curr_state == CLOSE_RCV){
     set_interrupt_level(l);
+    free(resend_alarm_arg);
     return;
   }
   socket->curr_state = CLOSE_SEND;
@@ -764,16 +772,16 @@ void minisocket_close(minisocket_t socket)
 
   minisocket_send_ctrl( MSG_FIN, socket, &error);
   //printf("in minisocket_close, sent my MSG_FIN\n");
-  resend_alarm_arg.sock = socket;
-  resend_alarm_arg.msg_type = MSG_FIN;
-  resend_alarm_arg.data_len = 0;
-  resend_alarm_arg.data = (char*) &socket; //placeholder
-  resend_alarm_arg.error = &error;
+  resend_alarm_arg->sock = socket;
+  resend_alarm_arg->msg_type = MSG_FIN;
+  resend_alarm_arg->data_len = 0;
+  resend_alarm_arg->data = (char*) &socket; //placeholder
+  resend_alarm_arg->error = &error;
   if (socket->resend_alarm){
     deregister_alarm(socket->resend_alarm);
   }
   socket->resend_alarm = NULL;
-  socket->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, &resend_alarm_arg, minithread_time());
+  socket->resend_alarm = set_alarm(RESEND_TIME_UNIT, minisocket_resend, resend_alarm_arg, minithread_time());
   //printf("in minisocket_close, set my alarm.\n");
   set_interrupt_level(l);
 
@@ -794,6 +802,7 @@ void minisocket_close(minisocket_t socket)
   set_interrupt_level(l);
 
   //printf("in minisocket_close, SUCCESS\n");
+  free(resend_alarm_arg);
   return;
 
 }
