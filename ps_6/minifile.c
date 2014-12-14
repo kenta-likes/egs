@@ -1283,20 +1283,27 @@ int minifile_new_inode(minifile_t handle, char* name, char type) {
 int minifile_get_parent_child_paths(char** parent_dir, char** new_dir_name, char* dirname){
   int name_len;
   int i;
+  char* abs_path;
+  char* real_path;
+
   *parent_dir = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char)); //allocate path holder
   *new_dir_name = (char*)calloc(MAX_PATH_SIZE + 1, sizeof(char)); //allocate dir name holder
-  strcpy(*parent_dir, dirname);
+  abs_path = minifile_absolute_path(dirname);
+  real_path = minifile_simplify_path(abs_path);
+  free(abs_path);
+  strcpy(*parent_dir, real_path);
 
   //clip off trailing /'s
-  name_len = strlen(dirname);
+  name_len = strlen(real_path);
   i = name_len - 1;
   while ((*parent_dir)[i] == '/' && i >= 0){
     (*parent_dir)[i] = '\0'; //nullify
     i--;
   }
-  if (i < 0){ //if name was only /'s
+  if (i < 0 || strcmp(real_path, "/") == 0){ //if name was only /'s
     free(*parent_dir);
     free(*new_dir_name);
+    free(real_path);
     return -1;
   }
 
@@ -1319,6 +1326,7 @@ int minifile_get_parent_child_paths(char** parent_dir, char** new_dir_name, char
     (*parent_dir)[1] = '\0';
   }
 
+  free(real_path);
   return 0;
 }
 
@@ -1445,6 +1453,7 @@ minifile_t minifile_open(char *filename, char *mode){
   }
   //printf("created handle for the file requested\n");
   //check if it is FILE_t
+  
   if (handle->i_block.u.hdr.type != FILE_t){
     semaphore_V(disk_op_lock);
     printf("%s: Is a directory\n", filename);
@@ -1475,7 +1484,7 @@ minifile_t minifile_open(char *filename, char *mode){
       return NULL;
     }
   }
-  else if (!strcmp(mode, "a")) {  
+  else if (!strcmp(mode, "a")) {
     handle->mode = APPEND;
   }
   else if (!strcmp(mode, "a+")) {  
@@ -1499,13 +1508,6 @@ minifile_t minifile_open(char *filename, char *mode){
     return NULL;
   }*/
     
-  if (handle->i_block.u.hdr.type == DIR_t) {
-    free(handle);
-    printf("open called on a directory\n");
-    semaphore_V(inode_lock_table[handle->inode_num]);
-    semaphore_V(disk_op_lock);
-    return NULL;
-  }
 
   semaphore_V(disk_op_lock);
   printf("exit minifile_open on success\n\n");
@@ -1572,37 +1574,55 @@ int minifile_write(minifile_t file, char *data, int len){
     return -1;
   }
 
+
+  //set the cursor to the end if this is append, and reload the file_ptr
+  if (file->mode == APPEND || file->mode == READ_APPEND){
+    //find the last byte
+    file->byte_cursor = file->i_block.u.hdr.count;
+    file->block_cursor = (file->byte_cursor) / (DATA_BLOCK_SIZE);//
+    get_next_block(file); //load up the next block
+  }
+
   //take the smaller of the len or the remaining bytes in file after cursor
   write_cap = len<((MAX_FILE_SIZE)-(file->byte_cursor))? len : (MAX_FILE_SIZE)-(file->byte_cursor);
+  if (write_cap < 1 && len > 0){
+    printf("Cannot write more data into file\n");
+    //there simply isn't more space to write
+    return -1;
+  }
   
   semaphore_P(disk_op_lock);
   //start writing away
-  while (bytes_written < write_cap){
-    //check if there are remaining data blocks to write to
-    if ( (file->i_block.u.hdr.count) - (file->byte_cursor) > 0 ){
-      if (minifile_get_next_block(file) == -1){
-        semaphore_V(disk_op_lock);
-        printf("write encountered an error\n");
-        return -1;
-        //TODO
-      }
-      if (write_cap - bytes_written > DATA_BLOCK_SIZE){ //more blocks ahead
-        memcpy(data + bytes_written, file->d_block.u.file_hdr.data, DATA_BLOCK_SIZE);
-        bytes_written += DATA_BLOCK_SIZE;
-        file->byte_cursor += DATA_BLOCK_SIZE;
-      }
-      else { //this should be last block
-        memcpy(data + bytes_written, file->d_block.u.file_hdr.data, write_cap - bytes_written);
-        bytes_written += write_cap - bytes_written;
-        file->byte_cursor += write_cap - bytes_written;
-      }
-    }
+  if ( (file->byte_cursor) % DATA_BLOCK_SIZE != 0 ){//current block has some space left over
+    //write awayyyyy
+
+    memcpy(file->d_block.u.file_hdr.data, data + bytes_written, DATA_BLOCK_SIZE);
+    bytes_written += DATA_BLOCK_SIZE;
+    file->byte_cursor += DATA_BLOCK_SIZE;
+  }
+  //allocate new blocks and keep writing
+    //if ( minifile_new_dblock(child_file_ptr, new_block, 2) == -1){
+  if (minifile_get_next_block(file) == -1){
+    semaphore_V(disk_op_lock);
+    printf("write encountered an error\n");
+    return -1;
+    //TODO
+  }
+  if (write_cap - bytes_written > DATA_BLOCK_SIZE){ //more blocks ahead
+    memcpy(file->d_block.u.file_hdr.data, data + bytes_written, DATA_BLOCK_SIZE);
+    bytes_written += DATA_BLOCK_SIZE;
+    file->byte_cursor += DATA_BLOCK_SIZE;
+  }
+  else { //this should be last block
+    memcpy(file->d_block.u.file_hdr.data, data + bytes_written, write_cap - bytes_written);
+    bytes_written += write_cap - bytes_written;
+    file->byte_cursor += write_cap - bytes_written;
   }
 
   semaphore_V(disk_op_lock);
   printf("exit minifile_write on success\n\n");
-
   */
+
   return 0;
 }
 
