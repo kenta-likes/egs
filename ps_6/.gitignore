@@ -45,6 +45,7 @@ filetest2
 filetest3
 filetest4
 filetest5
+filetest6
 .depend
 
 minisocket.o
@@ -116,3 +117,4 @@ filetest2.o
 filetest3.o
 filetest4.o
 filetest5.o
+filetest6.o
