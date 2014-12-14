@@ -42,7 +42,7 @@ int test(int* arg) {
     return -1;
   }
 
-  file = minifile_open("foo.txt", "r+");
+  file = minifile_open("foo.txt", "r");
   if (!file) {
     printf("minifile_open failed\n");
     return -1;
@@ -126,6 +126,12 @@ int test(int* arg) {
     return -1;
   }  
   
+  file = minifile_open("foo.txt", "r");
+  if (!file) {
+    printf("minifile_open failed\n");
+    return -1;
+  }
+    
   if (minifile_read(file, buff, 12) == -1) {
     printf("minifile_read failed\n");
     return -1;
@@ -139,6 +145,11 @@ int test(int* arg) {
   
   if (strcmp(buff+6, data2)) {
     printf("minifile_read failed\n");
+    return -1;
+  }
+
+  if (minifile_close(file) == -1) {
+    printf("minifile_close failed\n");
     return -1;
   }
 
