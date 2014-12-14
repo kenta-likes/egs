@@ -43,6 +43,8 @@ mkfs
 filetest1
 filetest2
 filetest3
+filetest4
+filetest5
 .depend
 
 minisocket.o
@@ -112,3 +114,5 @@ test_mkfs.o
 filetest1.o
 filetest2.o
 filetest3.o
+filetest4.o
+filetest5.o
