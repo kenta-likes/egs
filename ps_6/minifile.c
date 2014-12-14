@@ -1362,7 +1362,6 @@ minifile_t minifile_creat(char *filename){
   parent_block = (inode_block*)calloc(1, sizeof(inode_block));
 
   semaphore_P(disk_op_lock);
-  //semaphore_P(inode_lock_table[handle->inode_num]);
   
   //printf("calling get block on %s\n", filename);
   if (minifile_get_block_from_path(filename) != -1){
@@ -1397,7 +1396,8 @@ minifile_t minifile_creat(char *filename){
     return NULL;
   }
   child_block_num = minifile_new_inode(new_dir, new_dir_name, FILE_t);
-  semaphore_P(block_array[child_block_num]->block_sem);
+  //semaphore_P(inode_lock_table[child_block_num]);
+
   if (child_block_num == -1) {
     semaphore_V(disk_op_lock);
     //printf("failed on getting new inode! aaaahhhhhh\n");
@@ -1405,18 +1405,19 @@ minifile_t minifile_creat(char *filename){
     free(new_dir_name);
     free(parent_block);
     free(new_dir);
-    semaphore_V(block_array[child_block_num]->block_sem);
+    //semaphore_V(inode_lock_table[child_block_num]);
     return NULL;
   }
   child_file_ptr = minifile_create_handle(child_block_num);
   child_file_ptr->mode = READ_WRITE; //set the default permission
   if (!child_file_ptr){
+    semaphore_V(disk_op_lock);
     //printf("failed on retrieving child file ptr\n");
     free(parent_dir);
     free(new_dir_name);
     free(parent_block);
     free(new_dir);
-    semaphore_V(block_array[child_block_num]->block_sem);
+    //semaphore_V(inode_lock_table[child_block_num]);
     return NULL;
   }
   
